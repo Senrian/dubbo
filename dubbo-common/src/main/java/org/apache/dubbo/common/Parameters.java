@@ -105,7 +105,7 @@ public class Parameters {
 
     public String getDecodedParameter(String key, String defaultValue) {
         String value = getParameter(key, defaultValue);
-        if (value != null && value.length() > 0) {
+        if (value != null && !value.isEmpty()) {
             try {
                 value = URLDecoder.decode(value, "UTF-8");
             } catch (UnsupportedEncodingException e) {
@@ -186,7 +186,7 @@ public class Parameters {
 
     public boolean hasParameter(String key) {
         String value = getParameter(key);
-        return value != null && value.length() > 0;
+        return value != null && !value.isEmpty();
     }
 
     public String getMethodParameter(String method, String key) {
@@ -257,7 +257,7 @@ public class Parameters {
 
     public boolean hasMethodParameter(String method, String key) {
         String value = getMethodParameter(method, key);
-        return value != null && value.length() > 0;
+        return value != null && !value.isEmpty();
     }
 
     @Override
