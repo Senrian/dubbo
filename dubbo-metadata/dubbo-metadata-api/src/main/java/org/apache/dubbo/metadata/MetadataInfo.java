@@ -50,6 +50,7 @@ import java.util.stream.Collectors;
 
 import static org.apache.dubbo.common.constants.CommonConstants.DOT_SEPARATOR;
 import static org.apache.dubbo.common.constants.CommonConstants.GROUP_CHAR_SEPARATOR;
+import static org.apache.dubbo.common.constants.CommonConstants.IS_EXTRA;
 import static org.apache.dubbo.common.constants.CommonConstants.METHODS_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.TIMESTAMP_KEY;
 import static org.apache.dubbo.metadata.RevisionResolver.EMPTY_REVISION;
@@ -192,16 +193,11 @@ public class MetadataInfo implements Serializable {
         if (CollectionUtils.isEmptyMap(services)) {
             this.revision = EMPTY_REVISION;
         } else {
-            StringBuilder sb = new StringBuilder();
-            sb.append(app);
-            for (Map.Entry<String, ServiceInfo> entry : new TreeMap<>(services).entrySet()) {
-                sb.append(entry.getValue().toDescString());
-            }
-            String tempRevision = RevisionResolver.calRevision(sb.toString());
+            String tempRevision = calRevision();
             if (!StringUtils.isEquals(this.revision, tempRevision)) {
                 if (logger.isInfoEnabled()) {
                     logger.info(String.format(
-                            "metadata revision changed: %s -> %s, app: %s, services: %d",
+                            "[METADATA_REGISTER] metadata revision changed: %s -> %s, app: %s, services: %d",
                             this.revision, tempRevision, this.app, this.services.size()));
                 }
                 this.revision = tempRevision;
@@ -209,6 +205,15 @@ public class MetadataInfo implements Serializable {
             }
         }
         return revision;
+    }
+
+    public synchronized String calRevision() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(app);
+        for (Map.Entry<String, ServiceInfo> entry : new TreeMap<>(services).entrySet()) {
+            sb.append(entry.getValue().toDescString());
+        }
+        return RevisionResolver.calRevision(sb.toString());
     }
 
     public void setRevision(String revision) {
@@ -254,7 +259,14 @@ public class MetadataInfo implements Serializable {
         }
         Set<ServiceInfo> subServices = subscribedServices.get(serviceKeyWithoutProtocol);
         if (CollectionUtils.isNotEmpty(subServices)) {
-            return subServices.iterator().next();
+            List<ServiceInfo> validServices = subServices.stream()
+                    .filter(serviceInfo -> StringUtils.isEmpty(serviceInfo.getParameter(IS_EXTRA)))
+                    .collect(Collectors.toList());
+            if (CollectionUtils.isNotEmpty(validServices)) {
+                return validServices.iterator().next();
+            } else {
+                return subServices.iterator().next();
+            }
         }
         return null;
     }
@@ -286,7 +298,9 @@ public class MetadataInfo implements Serializable {
 
     public String getParameter(String key, String serviceKey) {
         ServiceInfo serviceInfo = getValidServiceInfo(serviceKey);
-        if (serviceInfo == null) return null;
+        if (serviceInfo == null) {
+            return null;
+        }
         return serviceInfo.getParameter(key);
     }
 

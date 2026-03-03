@@ -87,7 +87,7 @@ class SingleRegistryCenterInjvmIntegrationTest implements IntegrationTest {
         serviceConfig.setAsync(false);
         serviceConfig.setScope(SCOPE_LOCAL);
 
-        // initailize bootstrap
+        // initialize bootstrap
         DubboBootstrap.getInstance()
                 .application(new ApplicationConfig(PROVIDER_APPLICATION_NAME))
                 .protocol(new ProtocolConfig("injvm"))
@@ -185,7 +185,6 @@ class SingleRegistryCenterInjvmIntegrationTest implements IntegrationTest {
     @AfterEach
     public void tearDown() throws IOException {
         DubboBootstrap.reset();
-        PROVIDER_APPLICATION_NAME = null;
         serviceConfig = null;
         // The exported service has been unexported
         Assertions.assertTrue(serviceListener.getExportedServices().isEmpty());

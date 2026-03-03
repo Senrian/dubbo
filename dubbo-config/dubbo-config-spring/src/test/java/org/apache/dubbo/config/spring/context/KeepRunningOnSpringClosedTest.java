@@ -25,10 +25,19 @@ import org.apache.dubbo.config.spring.SysProps;
 import org.apache.dubbo.rpc.model.ModuleModel;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 class KeepRunningOnSpringClosedTest {
+
+    @BeforeEach
+    void setUp() {
+        DubboBootstrap.reset();
+        SysProps.clear();
+        SysProps.setProperty("dubbo.metrics.enabled", "false");
+        SysProps.setProperty("dubbo.metrics.protocol", "disabled");
+    }
 
     @Test
     void test() {
@@ -49,17 +58,18 @@ class KeepRunningOnSpringClosedTest {
             // No need check and wait
 
             DubboStateListener dubboStateListener = providerContext.getBean(DubboStateListener.class);
-            Assertions.assertEquals(DeployState.STARTED, dubboStateListener.getState());
+            Assertions.assertEquals(DeployState.COMPLETION, dubboStateListener.getState());
 
             ModuleModel moduleModel = providerContext.getBean(ModuleModel.class);
             ModuleDeployer moduleDeployer = moduleModel.getDeployer();
-            Assertions.assertTrue(moduleDeployer.isStarted());
+            Assertions.assertTrue(moduleDeployer.isCompletion());
 
             ApplicationDeployer applicationDeployer =
                     moduleModel.getApplicationModel().getDeployer();
-            Assertions.assertEquals(DeployState.STARTED, applicationDeployer.getState());
-            Assertions.assertEquals(true, applicationDeployer.isStarted());
-            Assertions.assertEquals(false, applicationDeployer.isStopped());
+            Assertions.assertEquals(DeployState.COMPLETION, applicationDeployer.getState());
+            Assertions.assertTrue(applicationDeployer.isCompletion());
+            Assertions.assertTrue(applicationDeployer.isStarted());
+            Assertions.assertFalse(applicationDeployer.isStopped());
             Assertions.assertNotNull(DubboSpringInitializer.findBySpringContext(providerContext));
 
             // close spring context
@@ -67,9 +77,10 @@ class KeepRunningOnSpringClosedTest {
 
             // Expect 2: dubbo application will not be destroyed after closing spring context cause
             // setKeepRunningOnSpringClosed(true)
-            Assertions.assertEquals(DeployState.STARTED, applicationDeployer.getState());
-            Assertions.assertEquals(true, applicationDeployer.isStarted());
-            Assertions.assertEquals(false, applicationDeployer.isStopped());
+            Assertions.assertEquals(DeployState.COMPLETION, applicationDeployer.getState());
+            Assertions.assertTrue(applicationDeployer.isCompletion());
+            Assertions.assertTrue(applicationDeployer.isStarted());
+            Assertions.assertFalse(applicationDeployer.isStopped());
             Assertions.assertNull(DubboSpringInitializer.findBySpringContext(providerContext));
         } finally {
             DubboBootstrap.getInstance().stop();

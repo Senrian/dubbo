@@ -19,9 +19,6 @@ package org.apache.dubbo.remoting.telnet.support;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * TelnetUtils
- */
 public class TelnetUtils {
 
     public static String toList(List<List<String>> table) {
@@ -120,8 +117,8 @@ public class TelnetUtils {
             for (int j = 0; j < widths.length; j++) {
                 String cell = row.get(j);
                 rowbuf.append(' ');
-                int remaing = cell.length();
-                while (remaing > 0) {
+                int remaining = cell.length();
+                while (remaining > 0) {
 
                     if (rowbuf.length() >= totalWidth) {
                         buf.append(rowbuf.toString());
@@ -132,8 +129,8 @@ public class TelnetUtils {
                         //                        }
                     }
 
-                    rowbuf.append(cell, cell.length() - remaing, cell.length() - remaing + 1);
-                    remaing--;
+                    rowbuf.append(cell, cell.length() - remaining, cell.length() - remaining + 1);
+                    remaining--;
                 }
                 int pad = widths[j] - cell.length();
                 if (pad > 0) {

@@ -23,9 +23,6 @@ import static org.apache.dubbo.common.constants.QosConstants.QOS_HOST_COMPATIBLE
 import static org.apache.dubbo.common.constants.QosConstants.QOS_PORT_COMPATIBLE;
 import static org.apache.dubbo.common.constants.RegistryConstants.REGISTRY_TYPE_KEY;
 
-/**
- *
- */
 public interface Constants {
 
     String STATUS_KEY = "status";
@@ -89,8 +86,6 @@ public interface Constants {
 
     String MULTICAST = "multicast";
 
-    String DUBBO_IP_TO_REGISTRY = "DUBBO_IP_TO_REGISTRY";
-
     String DUBBO_PORT_TO_REGISTRY = "DUBBO_PORT_TO_REGISTRY";
 
     String DUBBO_PORT_TO_BIND = "DUBBO_PORT_TO_BIND";
@@ -149,7 +144,17 @@ public interface Constants {
 
     String SERVER_THREAD_POOL_NAME = "DubboServerHandler";
 
+    String SERVER_THREAD_POOL_PREFIX = SERVER_THREAD_POOL_NAME + "-";
+
     String CLIENT_THREAD_POOL_NAME = "DubboClientHandler";
 
+    String CLIENT_THREAD_POOL_PREFIX = CLIENT_THREAD_POOL_NAME + "-";
+
     String REST_PROTOCOL = "rest";
+
+    String DEFAULT_NATIVE_COMPILER = "jdk";
+
+    String DEFAULT_NATIVE_PROXY = "jdk";
+
+    String DEFAULT_APP_NAME = "DEFAULT_DUBBO_APP";
 }

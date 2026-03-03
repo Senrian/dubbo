@@ -17,7 +17,6 @@
 package org.apache.dubbo.common.utils;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -228,6 +227,10 @@ class StringUtilsTest {
         assertEquals(StringUtils.join(s), "123");
         assertEquals(StringUtils.join(s, ','), "1,2,3");
         assertEquals(StringUtils.join(s, ","), "1,2,3");
+        assertEquals(StringUtils.join(s, ',', 0, 1), "1");
+        assertEquals(StringUtils.join(s, ',', 0, 2), "1,2");
+        assertEquals(StringUtils.join(s, ',', 0, 3), "1,2,3");
+        assertEquals("", StringUtils.join(s, ',', 2, 0), "1,2");
     }
 
     @Test
@@ -242,9 +245,6 @@ class StringUtilsTest {
 
         assertEquals(0, StringUtils.split("", 'a').length);
         assertEquals(0, StringUtils.split(null, 'a').length);
-
-        System.out.println(Arrays.toString(StringUtils.split("boo:and:foo", ':')));
-        System.out.println(Arrays.toString(StringUtils.split("boo:and:foo", 'o')));
     }
 
     @Test
@@ -470,6 +470,7 @@ class StringUtilsTest {
 
     /**
      * Test {@link StringUtils#toCommaDelimitedString(String, String...)}
+     *
      * @since 2.7.8
      */
     @Test
@@ -479,6 +480,9 @@ class StringUtilsTest {
 
         value = toCommaDelimitedString(null, null);
         assertNull(value);
+
+        value = toCommaDelimitedString("one", null);
+        assertEquals("one", value);
 
         value = toCommaDelimitedString("");
         assertEquals("", value);

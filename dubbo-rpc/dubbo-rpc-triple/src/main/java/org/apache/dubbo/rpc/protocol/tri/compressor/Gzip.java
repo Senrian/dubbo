@@ -16,10 +16,16 @@
  */
 package org.apache.dubbo.rpc.protocol.tri.compressor;
 
+import org.apache.dubbo.common.config.Configuration;
+import org.apache.dubbo.common.config.ConfigurationUtils;
+import org.apache.dubbo.rpc.Constants;
 import org.apache.dubbo.rpc.RpcException;
+import org.apache.dubbo.rpc.model.ApplicationModel;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -29,6 +35,13 @@ import java.util.zip.GZIPOutputStream;
 public class Gzip implements Compressor, DeCompressor {
 
     public static final String GZIP = "gzip";
+
+    private final int maxMessageSize;
+
+    public Gzip() {
+        Configuration conf = ConfigurationUtils.getEnvConfiguration(ApplicationModel.defaultModel());
+        this.maxMessageSize = conf.getInteger(Constants.H2_SETTINGS_MAX_MESSAGE_SIZE, 50 * 1024 * 1024);
+    }
 
     @Override
     public String getMessageEncoding() {
@@ -52,6 +65,15 @@ public class Gzip implements Compressor, DeCompressor {
     }
 
     @Override
+    public OutputStream decorate(OutputStream outputStream) {
+        try {
+            return new GZIPOutputStream(outputStream);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Override
     public byte[] decompress(byte[] payloadByteArr) throws RpcException {
         if (null == payloadByteArr || 0 == payloadByteArr.length) {
             return new byte[0];
@@ -59,10 +81,17 @@ public class Gzip implements Compressor, DeCompressor {
 
         ByteArrayInputStream byteInStream = new ByteArrayInputStream(payloadByteArr);
         ByteArrayOutputStream byteOutStream = new ByteArrayOutputStream();
+
         try (GZIPInputStream gzipInputStream = new GZIPInputStream(byteInStream)) {
             int readByteNum;
+            int totalBytesRead = 0;
             byte[] bufferArr = new byte[256];
             while ((readByteNum = gzipInputStream.read(bufferArr)) >= 0) {
+                totalBytesRead += readByteNum;
+                if (totalBytesRead > maxMessageSize) {
+                    throw new RpcException("Decompressed message size " + totalBytesRead
+                            + " exceeds the maximum configured message size " + maxMessageSize);
+                }
                 byteOutStream.write(bufferArr, 0, readByteNum);
             }
         } catch (Exception exception) {

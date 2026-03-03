@@ -42,4 +42,12 @@ public interface H2TransportListener {
     void onData(ByteBuf data, boolean endStream);
 
     void cancelByRemote(long errorCode);
+
+    void onClose();
+
+    /**
+     * Called when the channel writability changes.
+     * This is used for backpressure support via isReady/setOnReadyHandler.
+     */
+    default void onWritabilityChanged() {}
 }

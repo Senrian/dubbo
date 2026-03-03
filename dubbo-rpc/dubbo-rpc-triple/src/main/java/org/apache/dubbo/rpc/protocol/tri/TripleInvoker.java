@@ -22,8 +22,12 @@ import org.apache.dubbo.common.config.ConfigurationUtils;
 import org.apache.dubbo.common.constants.CommonConstants;
 import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
 import org.apache.dubbo.common.logger.LoggerFactory;
+import org.apache.dubbo.common.stream.ClientResponseObserver;
 import org.apache.dubbo.common.stream.StreamObserver;
 import org.apache.dubbo.common.threadpool.ThreadlessExecutor;
+import org.apache.dubbo.common.utils.ConcurrentHashMapUtils;
+import org.apache.dubbo.common.utils.SystemPropertyConfigUtils;
+import org.apache.dubbo.remoting.Constants;
 import org.apache.dubbo.remoting.api.connection.AbstractConnectionClient;
 import org.apache.dubbo.rpc.AppResponse;
 import org.apache.dubbo.rpc.AsyncRpcResult;
@@ -52,18 +56,19 @@ import org.apache.dubbo.rpc.protocol.tri.call.TripleClientCall;
 import org.apache.dubbo.rpc.protocol.tri.call.UnaryClientCallListener;
 import org.apache.dubbo.rpc.protocol.tri.compressor.Compressor;
 import org.apache.dubbo.rpc.protocol.tri.compressor.Identity;
+import org.apache.dubbo.rpc.protocol.tri.h12.grpc.GrpcUtils;
 import org.apache.dubbo.rpc.protocol.tri.observer.ClientCallToObserverAdapter;
 import org.apache.dubbo.rpc.protocol.tri.transport.TripleWriteQueue;
 import org.apache.dubbo.rpc.service.ServiceDescriptorInternalCache;
 import org.apache.dubbo.rpc.support.RpcUtils;
 
 import java.util.Arrays;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 import io.netty.util.AsciiString;
@@ -75,6 +80,7 @@ import static org.apache.dubbo.common.constants.CommonConstants.INTERFACE_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.TIMEOUT_KEY;
 import static org.apache.dubbo.common.constants.LoggerCodeConstants.PROTOCOL_FAILED_DESTROY_INVOKER;
 import static org.apache.dubbo.common.constants.LoggerCodeConstants.PROTOCOL_FAILED_REQUEST;
+import static org.apache.dubbo.remoting.http12.message.MediaType.APPLICATION_GRPC_PROTO;
 import static org.apache.dubbo.rpc.Constants.COMPRESSOR_KEY;
 import static org.apache.dubbo.rpc.Constants.TOKEN_KEY;
 import static org.apache.dubbo.rpc.model.MethodDescriptor.RpcType.UNARY;
@@ -93,10 +99,11 @@ public class TripleInvoker<T> extends AbstractInvoker<T> {
     private final String acceptEncodings;
     private final TripleWriteQueue writeQueue = new TripleWriteQueue(256);
 
-    private static final boolean setFutureWhenSync =
-            Boolean.parseBoolean(System.getProperty(CommonConstants.SET_FUTURE_IN_SYNC_MODE, "true"));
+    private static final boolean setFutureWhenSync = Boolean.parseBoolean(SystemPropertyConfigUtils.getSystemProperty(
+            CommonConstants.ThirdPartyProperty.SET_FUTURE_IN_SYNC_MODE, "true"));
     private final PackableMethodFactory packableMethodFactory;
-    private final Map<MethodDescriptor, PackableMethod> packableMethodCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<MethodDescriptor, PackableMethod> packableMethodCache = new ConcurrentHashMap<>();
+    private static Compressor compressor;
 
     public TripleInvoker(
             Class<T> serviceType,
@@ -118,14 +125,19 @@ public class TripleInvoker<T> extends AbstractInvoker<T> {
 
     private static AsciiString getSchemeFromUrl(URL url) {
         boolean ssl = url.getParameter(CommonConstants.SSL_ENABLED_KEY, false);
-        return ssl ? TripleConstant.HTTPS_SCHEME : TripleConstant.HTTP_SCHEME;
+        return ssl ? TripleConstants.HTTPS_SCHEME : TripleConstants.HTTP_SCHEME;
     }
 
     private static Compressor getCompressorFromEnv() {
-        Configuration configuration = ConfigurationUtils.getEnvConfiguration(ApplicationModel.defaultModel());
-        String compressorKey = configuration.getString(COMPRESSOR_KEY, Identity.MESSAGE_ENCODING);
-        return Compressor.getCompressor(
-                ScopeModelUtil.getFrameworkModel(ApplicationModel.defaultModel()), compressorKey);
+        Compressor compressor = TripleInvoker.compressor;
+        if (compressor == null) {
+            ApplicationModel model = ApplicationModel.defaultModel();
+            Configuration configuration = ConfigurationUtils.getEnvConfiguration(model);
+            String compressorKey = configuration.getString(COMPRESSOR_KEY, Identity.MESSAGE_ENCODING);
+            compressor = Compressor.getCompressor(ScopeModelUtil.getFrameworkModel(model), compressorKey);
+            TripleInvoker.compressor = compressor;
+        }
+        return compressor;
     }
 
     @Override
@@ -144,17 +156,23 @@ public class TripleInvoker<T> extends AbstractInvoker<T> {
         ServiceDescriptor serviceDescriptor = consumerModel.getServiceModel();
         MethodDescriptor methodDescriptor =
                 serviceDescriptor.getMethod(invocation.getMethodName(), invocation.getParameterTypes());
-        if (methodDescriptor == null
-                && RpcUtils.isGenericCall(
-                        ((RpcInvocation) invocation).getParameterTypesDesc(), invocation.getMethodName())) {
-            // Only reach when server generic
-            methodDescriptor = ServiceDescriptorInternalCache.genericService()
-                    .getMethod(invocation.getMethodName(), invocation.getParameterTypes());
+        if (methodDescriptor == null) {
+            if (RpcUtils.isGenericCall(
+                    ((RpcInvocation) invocation).getParameterTypesDesc(), invocation.getMethodName())) {
+                // Only reach when server generic
+                methodDescriptor = ServiceDescriptorInternalCache.genericService()
+                        .getMethod(invocation.getMethodName(), invocation.getParameterTypes());
+            } else if (RpcUtils.isEcho(
+                    ((RpcInvocation) invocation).getParameterTypesDesc(), invocation.getMethodName())) {
+                methodDescriptor = ServiceDescriptorInternalCache.echoService()
+                        .getMethod(invocation.getMethodName(), invocation.getParameterTypes());
+            }
         }
         ExecutorService callbackExecutor =
                 isSync(methodDescriptor, invocation) ? new ThreadlessExecutor() : streamExecutor;
         ClientCall call = new TripleClientCall(
                 connectionClient, callbackExecutor, getUrl().getOrDefaultFrameworkModel(), writeQueue);
+        RpcContext.getServiceContext().setLocalAddress(connectionClient.getLocalAddress());
         AsyncRpcResult result;
         try {
             switch (methodDescriptor.getRpcType()) {
@@ -198,10 +216,20 @@ public class TripleInvoker<T> extends AbstractInvoker<T> {
 
     AsyncRpcResult invokeServerStream(MethodDescriptor methodDescriptor, Invocation invocation, ClientCall call) {
         RequestMetadata request = createRequest(methodDescriptor, invocation, null);
-        StreamObserver<Object> responseObserver =
-                (StreamObserver<Object>) invocation.getArguments()[1];
-        final StreamObserver<Object> requestObserver = streamCall(call, request, responseObserver);
-        requestObserver.onNext(invocation.getArguments()[0]);
+        Object[] arguments = invocation.getArguments();
+        final StreamObserver<Object> requestObserver;
+        if (arguments.length == 2) {
+            StreamObserver<Object> responseObserver = (StreamObserver<Object>) arguments[1];
+            requestObserver = streamCall(call, request, responseObserver);
+            requestObserver.onNext(invocation.getArguments()[0]);
+        } else if (arguments.length == 1) {
+            StreamObserver<Object> responseObserver = (StreamObserver<Object>) arguments[0];
+            requestObserver = streamCall(call, request, responseObserver);
+            requestObserver.onNext(null);
+        } else {
+            throw new IllegalStateException(
+                    "The first parameter must be a StreamObserver when there are no parameters, or the second parameter must be a StreamObserver when there are parameters");
+        }
         requestObserver.onCompleted();
         return new AsyncRpcResult(CompletableFuture.completedFuture(new AppResponse()), invocation);
     }
@@ -216,20 +244,62 @@ public class TripleInvoker<T> extends AbstractInvoker<T> {
         return result;
     }
 
+    /**
+     * Start a streaming call
+     * <p>
+     * The call sequence is:
+     * <pre>
+     * 1. Create adapter and listener
+     * 2. Call beforeStart() if observer is ClientResponseObserver or CancelableStreamObserver
+     *   (allows configuring onReadyHandler before stream starts)
+     * 3. Start the call (creates stream, may trigger initial onReady)
+     * </pre>
+     *
+     * <p>The two interfaces serve different purposes:
+     * <ul>
+     *   <li>{@link ClientResponseObserver} - gRPC-compatible interface with just beforeStart()
+     *   <li>{@link CancelableStreamObserver} - Dubbo's extended interface with cancellation and startRequest()
+     * </ul>
+     * An observer can implement both interfaces (e.g., ClientTripleReactorPublisher).
+     */
+    @SuppressWarnings("unchecked")
     StreamObserver<Object> streamCall(
             ClientCall call, RequestMetadata metadata, StreamObserver<Object> responseObserver) {
+        ClientCallToObserverAdapter<Object> adapter = new ClientCallToObserverAdapter<>(call, true);
+
+        // Create listener and associate with adapter
         ObserverToClientCallListenerAdapter listener = new ObserverToClientCallListenerAdapter(responseObserver);
-        StreamObserver<Object> streamObserver = call.start(metadata, listener);
+        listener.setRequestAdapter(adapter);
+
+        // Handle CancelableStreamObserver first (for cancellation context and startRequest)
+        // This must be done regardless of whether it also implements ClientResponseObserver
         if (responseObserver instanceof CancelableStreamObserver) {
-            final CancellationContext context = new CancellationContext();
-            CancelableStreamObserver<Object> cancelableStreamObserver =
-                    (CancelableStreamObserver<Object>) responseObserver;
-            cancelableStreamObserver.setCancellationContext(context);
-            context.addListener(context1 -> call.cancelByLocal(new IllegalStateException("Canceled by app")));
-            listener.setOnStartConsumer(dummy -> cancelableStreamObserver.startRequest());
-            cancelableStreamObserver.beforeStart((ClientCallToObserverAdapter<Object>) streamObserver);
+            CancelableStreamObserver<Object> cancelableObserver = (CancelableStreamObserver<Object>) responseObserver;
+            // Set up cancellation context
+            CancellationContext context = new CancellationContext();
+            cancelableObserver.setCancellationContext(context);
+            context.addListener(ctx -> call.cancelByLocal(new IllegalStateException("Canceled by app")));
+            // Set up startRequest to be called when stream is established (onStart)
+            listener.setOnStartConsumer(dummy -> cancelableObserver.startRequest());
         }
-        return streamObserver;
+
+        // Now call beforeStart() - use ClientResponseObserver if available (gRPC-compatible),
+        // otherwise fall back to CancelableStreamObserver.beforeStart()
+        if (responseObserver instanceof ClientResponseObserver) {
+            // gRPC-compatible interface - beforeStart takes ClientCallStreamObserver
+            ClientResponseObserver<Object, Object> clientResponseObserver =
+                    (ClientResponseObserver<Object, Object>) responseObserver;
+            clientResponseObserver.beforeStart(adapter);
+        } else if (responseObserver instanceof CancelableStreamObserver) {
+            // Legacy Dubbo interface - beforeStart takes ClientCallToObserverAdapter
+            CancelableStreamObserver<Object> cancelableObserver = (CancelableStreamObserver<Object>) responseObserver;
+            cancelableObserver.beforeStart(adapter);
+        }
+
+        // Start the call - creates stream and may trigger initial onReady
+        call.start(metadata, listener);
+
+        return adapter;
     }
 
     AsyncRpcResult invokeUnary(
@@ -270,7 +340,9 @@ public class TripleInvoker<T> extends AbstractInvoker<T> {
         result.setExecutor(callbackExecutor);
         ClientCall.Listener callListener = new UnaryClientCallListener(future);
 
-        final StreamObserver<Object> requestObserver = call.start(request, callListener);
+        // Create adapter for unary call (streamingResponse=false)
+        ClientCallToObserverAdapter<Object> requestObserver = new ClientCallToObserverAdapter<>(call, false);
+        call.start(request, callListener);
         requestObserver.onNext(pureArgument);
         requestObserver.onCompleted();
         return result;
@@ -287,8 +359,10 @@ public class TripleInvoker<T> extends AbstractInvoker<T> {
         if (methodDescriptor instanceof PackableMethod) {
             meta.packableMethod = (PackableMethod) methodDescriptor;
         } else {
-            meta.packableMethod = packableMethodCache.computeIfAbsent(
-                    methodDescriptor, (md) -> packableMethodFactory.create(md, url, TripleConstant.CONTENT_PROTO));
+            meta.packableMethod = ConcurrentHashMapUtils.computeIfAbsent(
+                    packableMethodCache,
+                    methodDescriptor,
+                    (md) -> packableMethodFactory.create(md, url, APPLICATION_GRPC_PROTO.getName()));
         }
         meta.convertNoLowerHeader = TripleProtocol.CONVERT_NO_LOWER_HEADER;
         meta.ignoreDefaultVersion = TripleProtocol.IGNORE_1_0_0_VERSION;
@@ -302,7 +376,7 @@ public class TripleInvoker<T> extends AbstractInvoker<T> {
         meta.version = url.getVersion();
         meta.acceptEncoding = acceptEncodings;
         if (timeout != null) {
-            meta.timeout = timeout + "m";
+            meta.timeout = GrpcUtils.getTimeoutHeaderValue(Long.valueOf(timeout), TimeUnit.MILLISECONDS);
         }
         String application = (String) invocation.getObjectAttachmentWithoutConvert(CommonConstants.APPLICATION_KEY);
         if (application == null) {
@@ -318,7 +392,13 @@ public class TripleInvoker<T> extends AbstractInvoker<T> {
         if (!super.isAvailable()) {
             return false;
         }
-        return connectionClient.isConnected();
+        if (!connectionClient.isConnected()) {
+            return false;
+        }
+        if (connectionClient.hasAttribute(Constants.CHANNEL_ATTRIBUTE_READONLY_KEY)) {
+            return false;
+        }
+        return true;
     }
 
     @Override

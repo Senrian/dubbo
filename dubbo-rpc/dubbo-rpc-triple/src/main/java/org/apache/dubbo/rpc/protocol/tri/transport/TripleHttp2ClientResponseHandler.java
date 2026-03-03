@@ -80,6 +80,7 @@ public final class TripleHttp2ClientResponseHandler extends SimpleChannelInbound
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
+        transportListener.onClose();
         ctx.close();
     }
 
@@ -94,5 +95,13 @@ public final class TripleHttp2ClientResponseHandler extends SimpleChannelInbound
                 cause);
         transportListener.cancelByRemote(Http2Error.INTERNAL_ERROR.code());
         ctx.close();
+    }
+
+    @Override
+    public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
+        // Notify the transport listener when writability changes
+        // This enables application-level backpressure via isReady/onReadyHandler
+        transportListener.onWritabilityChanged();
+        super.channelWritabilityChanged(ctx);
     }
 }

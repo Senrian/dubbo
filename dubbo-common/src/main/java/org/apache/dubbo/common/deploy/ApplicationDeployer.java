@@ -48,7 +48,11 @@ public interface ApplicationDeployer extends Deployer<ApplicationModel> {
     /**
      * Register application instance and start internal services
      */
-    void prepareApplicationInstance();
+    void prepareApplicationInstance(ModuleModel moduleModel);
+
+    void exportMetadataService();
+
+    void registerServiceInstance();
 
     /**
      * Register application instance and start internal services

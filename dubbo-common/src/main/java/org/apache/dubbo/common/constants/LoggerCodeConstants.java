@@ -91,6 +91,8 @@ public interface LoggerCodeConstants {
 
     String VULNERABILITY_WARNING = "0-28";
 
+    String COMMON_NOT_FOUND_TRACER_DEPENDENCY = "0-29";
+
     // Registry module
 
     String REGISTRY_ADDRESS_INVALID = "1-1";
@@ -436,6 +438,9 @@ public interface LoggerCodeConstants {
     String QOS_UNEXPECTED_EXCEPTION = "7-6";
 
     String QOS_PERMISSION_DENY_EXCEPTION = "7-7";
+
+    // MCP plugin
+    String MCP_FAILED_START_SERVER = "8-1";
 
     // Testing module (8[X], where [X] is number of the module to be tested.)
     String TESTING_REGISTRY_FAILED_TO_START_ZOOKEEPER = "81-1";

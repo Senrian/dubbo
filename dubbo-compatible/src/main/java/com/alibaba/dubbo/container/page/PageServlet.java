@@ -40,17 +40,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.alibaba.dubbo.common.Constants;
 import com.alibaba.dubbo.common.URL;
 
-/**
- * PageServlet
- */
 public class PageServlet extends HttpServlet {
 
     protected static final Logger logger = LoggerFactory.getLogger(PageServlet.class);
     private static final long serialVersionUID = -8370312705453328501L;
     private static PageServlet INSTANCE;
     protected final Random random = new Random();
-    protected final Map<String, PageHandler> pages = new ConcurrentHashMap<String, PageHandler>();
-    protected final List<PageHandler> menus = new ArrayList<PageHandler>();
+    protected final Map<String, PageHandler> pages = new ConcurrentHashMap<>();
+    protected final List<PageHandler> menus = new ArrayList<>();
 
     public static PageServlet getInstance() {
         return INSTANCE;

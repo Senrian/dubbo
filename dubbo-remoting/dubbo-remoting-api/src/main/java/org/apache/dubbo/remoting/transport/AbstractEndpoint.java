@@ -31,12 +31,9 @@ import org.apache.dubbo.rpc.model.FrameworkModel;
 import static org.apache.dubbo.common.constants.LoggerCodeConstants.INTERNAL_ERROR;
 import static org.apache.dubbo.rpc.model.ScopeModelUtil.getFrameworkModel;
 
-/**
- * AbstractEndpoint
- */
 public abstract class AbstractEndpoint extends AbstractPeer implements Resetable {
 
-    private static final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(AbstractEndpoint.class);
+    protected final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(getClass());
 
     private Codec2 codec;
 
@@ -48,6 +45,8 @@ public abstract class AbstractEndpoint extends AbstractPeer implements Resetable
         this.connectTimeout =
                 url.getPositiveParameter(Constants.CONNECT_TIMEOUT_KEY, Constants.DEFAULT_CONNECT_TIMEOUT);
     }
+
+    protected AbstractEndpoint() {}
 
     protected static Codec2 getChannelCodec(URL url) {
         String codecName = url.getParameter(Constants.CODEC_KEY);

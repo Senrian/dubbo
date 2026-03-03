@@ -24,6 +24,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MonitorInfo;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
+import java.nio.charset.StandardCharsets;
 
 import static java.lang.Thread.State.BLOCKED;
 import static java.lang.Thread.State.TIMED_WAITING;
@@ -33,7 +34,7 @@ public class JVMUtil {
     public static void jstack(OutputStream stream) throws Exception {
         ThreadMXBean threadMxBean = ManagementFactory.getThreadMXBean();
         for (ThreadInfo threadInfo : threadMxBean.dumpAllThreads(true, true)) {
-            stream.write(getThreadDumpString(threadInfo).getBytes());
+            stream.write(getThreadDumpString(threadInfo).getBytes(StandardCharsets.UTF_8));
         }
     }
 
@@ -56,7 +57,8 @@ public class JVMUtil {
         int i = 0;
         // default is 32, means only print up to 32 lines
         int jstackMaxLine = 32;
-        String jstackMaxLineStr = System.getProperty(CommonConstants.DUBBO_JSTACK_MAXLINE);
+        String jstackMaxLineStr =
+                SystemPropertyConfigUtils.getSystemProperty(CommonConstants.DubboProperty.DUBBO_JSTACK_MAXLINE);
         if (StringUtils.isNotEmpty(jstackMaxLineStr)) {
             try {
                 jstackMaxLine = Integer.parseInt(jstackMaxLineStr);

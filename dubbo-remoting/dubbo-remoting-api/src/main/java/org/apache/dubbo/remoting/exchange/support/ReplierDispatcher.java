@@ -23,14 +23,11 @@ import org.apache.dubbo.remoting.exchange.ExchangeChannel;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * ReplierDispatcher
- */
 public class ReplierDispatcher implements Replier<Object> {
 
     private final Replier<?> defaultReplier;
 
-    private final Map<Class<?>, Replier<?>> repliers = new ConcurrentHashMap<Class<?>, Replier<?>>();
+    private final Map<Class<?>, Replier<?>> repliers = new ConcurrentHashMap<>();
 
     public ReplierDispatcher() {
         this(null, null);

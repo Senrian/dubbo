@@ -20,17 +20,22 @@ import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.URLStrParser;
 import org.apache.dubbo.common.constants.RemotingConstants;
 import org.apache.dubbo.common.url.component.ServiceConfigURL;
+import org.apache.dubbo.rpc.model.ServiceMetadata;
+import org.apache.dubbo.rpc.model.ServiceModel;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static java.util.Collections.emptyMap;
 import static org.apache.dubbo.common.constants.CommonConstants.ANY_VALUE;
+import static org.apache.dubbo.common.constants.CommonConstants.CHECK_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.CLASSIFIER_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.COMMA_SPLIT_PATTERN;
 import static org.apache.dubbo.common.constants.CommonConstants.CONSUMER;
@@ -181,7 +186,7 @@ public class UrlUtils {
             throw new IllegalArgumentException(
                     "Addresses is not allowed to be empty, please re-enter."); // here won't be empty
         }
-        List<URL> registries = new ArrayList<URL>();
+        List<URL> registries = new ArrayList<>();
         for (String addr : addresses) {
             registries.add(parseURL(addr, defaults));
         }
@@ -518,6 +523,10 @@ public class UrlUtils {
                 || (url.getProtocol() != null && url.getProtocol().endsWith("-registry-protocol"));
     }
 
+    public static boolean isCheck(URL url) {
+        return url.getParameter(CHECK_KEY, true) && url.getPort() != 0;
+    }
+
     /**
      * The specified {@link URL} is service discovery registry type or not
      *
@@ -685,5 +694,15 @@ public class UrlUtils {
 
     public static boolean isConsumer(URL url) {
         return url.getProtocol().equalsIgnoreCase(CONSUMER) || url.getPort() == 0;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T> T computeServiceAttribute(URL url, String key, Function<URL, T> fn) {
+        return Optional.ofNullable(url.getServiceModel())
+                .map(ServiceModel::getServiceMetadata)
+                .map(ServiceMetadata::getAttributeMap)
+                .map(stringObjectMap ->
+                        (T) ConcurrentHashMapUtils.computeIfAbsent(stringObjectMap, key, k -> fn.apply(url)))
+                .orElse(null);
     }
 }
