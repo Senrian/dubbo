@@ -33,6 +33,7 @@ import org.apache.dubbo.rpc.service.GenericService;
 import org.apache.dubbo.rpc.support.RpcUtils;
 
 import java.lang.reflect.Method;
+import java.util.Objects;
 
 import static org.apache.dubbo.common.constants.LoggerCodeConstants.CONFIG_FILTER_VALIDATION_EXCEPTION;
 
@@ -94,7 +95,7 @@ public class ExceptionFilter implements Filter, Filter.Listener {
                 // directly throw if exception class and interface class are in the same jar file.
                 String serviceFile = ReflectUtils.getCodeBase(invoker.getInterface());
                 String exceptionFile = ReflectUtils.getCodeBase(exception.getClass());
-                if (serviceFile == null || exceptionFile == null || serviceFile.equals(exceptionFile)) {
+                if (Objects.equals(serviceFile, exceptionFile)) {
                     return;
                 }
                 // directly throw if it's JDK exception
