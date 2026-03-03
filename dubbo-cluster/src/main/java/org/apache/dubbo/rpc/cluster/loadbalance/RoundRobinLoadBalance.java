@@ -101,6 +101,9 @@ public class RoundRobinLoadBalance extends AbstractLoadBalance {
         WeightedRoundRobin selectedWRR = null;
         for (Invoker<T> invoker : invokers) {
             String identifyString = invoker.getUrl().toIdentityString();
+            if (identifyString == null || identifyString.isEmpty()) {
+                continue;
+            }
             int weight = getWeight(invoker, invocation);
             WeightedRoundRobin weightedRoundRobin = ConcurrentHashMapUtils.computeIfAbsent(map, identifyString, k -> {
                 WeightedRoundRobin wrr = new WeightedRoundRobin();

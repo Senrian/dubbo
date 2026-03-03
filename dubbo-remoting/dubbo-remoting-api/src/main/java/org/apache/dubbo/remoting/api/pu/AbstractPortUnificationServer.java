@@ -18,47 +18,71 @@ package org.apache.dubbo.remoting.api.pu;
 
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.extension.ExtensionLoader;
+import org.apache.dubbo.common.utils.StringUtils;
 import org.apache.dubbo.remoting.ChannelHandler;
 import org.apache.dubbo.remoting.RemotingException;
 import org.apache.dubbo.remoting.api.WireProtocol;
 import org.apache.dubbo.remoting.transport.AbstractServer;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static org.apache.dubbo.common.constants.CommonConstants.COMMA_SEPARATOR;
+import static org.apache.dubbo.common.constants.CommonConstants.EXT_PROTOCOL;
 
 public abstract class AbstractPortUnificationServer extends AbstractServer {
 
     /**
      * extension name -> activate WireProtocol
      */
-    private final Map<String, WireProtocol> protocols;
+    private volatile Map<String, WireProtocol> protocols;
 
     /*
     protocol name --> URL object
     wire protocol will get url object to config server pipeline for channel
      */
-    private final Map<String, URL> supportedUrls = new ConcurrentHashMap<>();
+    private Map<String, URL> supportedUrls;
 
     /*
     protocol name --> ChannelHandler object
     wire protocol will get handler to config server pipeline for channel
     (for triple protocol, it's a default handler that do nothing)
      */
-    private final Map<String, ChannelHandler> supportedHandlers = new ConcurrentHashMap<>();
+    private Map<String, ChannelHandler> supportedHandlers;
 
     public AbstractPortUnificationServer(URL url, ChannelHandler handler) throws RemotingException {
         super(url, handler);
-        ExtensionLoader<WireProtocol> extensionLoader =
-                url.getOrDefaultFrameworkModel().getExtensionLoader(WireProtocol.class);
-        this.protocols = extensionLoader.getActivateExtension(url, new String[0]).stream()
-                .collect(Collectors.toConcurrentMap(extensionLoader::getExtensionName, Function.identity()));
     }
 
     public Map<String, WireProtocol> getProtocols() {
         return protocols;
     }
+
+    @Override
+    protected final void doOpen() {
+        // initialize supportedUrls and supportedHandlers before potential usage to avoid NPE.
+        supportedUrls = new ConcurrentHashMap<>();
+        supportedHandlers = new ConcurrentHashMap<>();
+
+        ExtensionLoader<WireProtocol> loader =
+                getUrl().getOrDefaultFrameworkModel().getExtensionLoader(WireProtocol.class);
+        Map<String, WireProtocol> protocols = loader.getActivateExtension(getUrl(), new String[0]).stream()
+                .collect(Collectors.toConcurrentMap(loader::getExtensionName, Function.identity()));
+        // load extra protocols
+        String extraProtocols = getUrl().getParameter(EXT_PROTOCOL);
+        if (StringUtils.isNotEmpty(extraProtocols)) {
+            Arrays.stream(extraProtocols.split(COMMA_SEPARATOR)).forEach(p -> {
+                protocols.put(p, loader.getExtension(p));
+            });
+        }
+        this.protocols = protocols;
+        doOpen0();
+    }
+
+    protected abstract void doOpen0();
 
     /*
     This method registers URL object and corresponding channel handler to pu server.

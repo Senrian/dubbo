@@ -18,12 +18,10 @@ package org.apache.dubbo.rpc.cluster.router.tag;
 
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.beans.factory.ScopeBeanFactory;
-import org.apache.dubbo.common.extension.ExtensionLoader;
 import org.apache.dubbo.common.utils.Holder;
 import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.RpcInvocation;
 import org.apache.dubbo.rpc.cluster.router.MockInvoker;
-import org.apache.dubbo.rpc.cluster.router.mesh.util.TracingContextProvider;
 import org.apache.dubbo.rpc.cluster.router.state.BitList;
 import org.apache.dubbo.rpc.cluster.router.state.StateRouter;
 import org.apache.dubbo.rpc.cluster.router.tag.model.TagRouterRule;
@@ -32,15 +30,18 @@ import org.apache.dubbo.rpc.model.ApplicationModel;
 import org.apache.dubbo.rpc.model.ModuleModel;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
+import com.google.common.collect.Sets;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import static org.apache.dubbo.common.constants.CommonConstants.ANY_VALUE;
 import static org.apache.dubbo.common.constants.CommonConstants.TAG_KEY;
 import static org.mockito.Mockito.when;
 
@@ -48,7 +49,6 @@ class TagStateRouterTest {
     private URL url;
     private ModuleModel originModel;
     private ModuleModel moduleModel;
-    private Set<TracingContextProvider> tracingContextProviders;
 
     @BeforeEach
     public void setup() {
@@ -58,11 +58,6 @@ class TagStateRouterTest {
         ScopeBeanFactory originBeanFactory = originModel.getBeanFactory();
         ScopeBeanFactory beanFactory = Mockito.spy(originBeanFactory);
         when(moduleModel.getBeanFactory()).thenReturn(beanFactory);
-
-        ExtensionLoader<TracingContextProvider> extensionLoader = Mockito.mock(ExtensionLoader.class);
-        tracingContextProviders = new HashSet<>();
-        when(extensionLoader.getSupportedExtensionInstances()).thenReturn(tracingContextProviders);
-        when(moduleModel.getExtensionLoader(TracingContextProvider.class)).thenReturn(extensionLoader);
 
         url = URL.valueOf("test://localhost/DemoInterface").setScopeModel(moduleModel);
     }
@@ -263,5 +258,118 @@ class TagStateRouterTest {
 
         TagRouterRule tagRouterRule = TagRuleParser.parse(tagRouterRuleConfig);
         return tagRouterRule;
+    }
+
+    @Test
+    public void tagMultiLevelTest() {
+        String tagSelector = "beta|team1|partner1";
+        Set<String> address1 = Sets.newHashSet("192.168.5.1:20880");
+        Map<String, Set<String>> tagAddresses = new HashMap<>();
+        tagAddresses.put("beta", address1);
+        Assertions.assertEquals(address1, TagStateRouter.selectAddressByTagLevel(tagAddresses, tagSelector, false));
+
+        Set<String> address2 = Sets.newHashSet("192.168.5.2:20880");
+        tagAddresses.put("beta|team1", address2);
+        Assertions.assertEquals(address2, TagStateRouter.selectAddressByTagLevel(tagAddresses, tagSelector, false));
+
+        Set<String> address3 = Sets.newHashSet("192.168.5.3:20880");
+        tagAddresses.put("beta|team1|partner1", address3);
+        Assertions.assertEquals(address3, TagStateRouter.selectAddressByTagLevel(tagAddresses, tagSelector, false));
+
+        tagSelector = "beta";
+        Assertions.assertEquals(address1, TagStateRouter.selectAddressByTagLevel(tagAddresses, tagSelector, false));
+        tagSelector = "beta|team1";
+        Assertions.assertEquals(address2, TagStateRouter.selectAddressByTagLevel(tagAddresses, tagSelector, false));
+        tagSelector = "beta|team1|partner1";
+        Assertions.assertEquals(address3, TagStateRouter.selectAddressByTagLevel(tagAddresses, tagSelector, false));
+
+        tagSelector = "beta2";
+        Assertions.assertNull(TagStateRouter.selectAddressByTagLevel(tagAddresses, tagSelector, false));
+        tagSelector = "beta|team2";
+        Assertions.assertEquals(address1, TagStateRouter.selectAddressByTagLevel(tagAddresses, tagSelector, false));
+        tagSelector = "beta|team1|partner2";
+        Assertions.assertEquals(address2, TagStateRouter.selectAddressByTagLevel(tagAddresses, tagSelector, false));
+    }
+
+    @Test
+    public void tagLevelForceTest() {
+        Set<String> addresses = Sets.newHashSet("192.168.1.223:20880");
+        Map<String, Set<String>> tagAddresses = new HashMap<>();
+        tagAddresses.put("beta", addresses);
+        Set<String> selectedAddresses = TagStateRouter.selectAddressByTagLevel(tagAddresses, "beta", true);
+        Assertions.assertEquals(addresses, selectedAddresses);
+    }
+
+    @Test
+    void testTagRouteWithWildcardShouldReturnAllProviders() {
+        StateRouter<TagRouterRule> router = new TagStateRouterFactory().getRouter(TagRouterRule.class, url);
+
+        List<Invoker<TagRouterRule>> originInvokers = new ArrayList<>();
+
+        URL url1 = URL.valueOf("test://127.0.0.1:7777/DemoInterface?dubbo.tag=t-01")
+                .setScopeModel(moduleModel);
+        URL url2 = URL.valueOf("test://127.0.0.1:7778/DemoInterface?dubbo.tag=t-02")
+                .setScopeModel(moduleModel);
+        URL url3 = URL.valueOf("test://127.0.0.1:7779/DemoInterface?dubbo.tag=t-03")
+                .setScopeModel(moduleModel);
+        URL url4 = URL.valueOf("test://127.0.0.1:7780/DemoInterface?dubbo.tag=t-04")
+                .setScopeModel(moduleModel);
+
+        Invoker<TagRouterRule> invoker1 = new MockInvoker<>(url1, true);
+        Invoker<TagRouterRule> invoker2 = new MockInvoker<>(url2, true);
+        Invoker<TagRouterRule> invoker3 = new MockInvoker<>(url3, true);
+        Invoker<TagRouterRule> invoker4 = new MockInvoker<>(url4, true);
+        originInvokers.add(invoker1);
+        originInvokers.add(invoker2);
+        originInvokers.add(invoker3);
+        originInvokers.add(invoker4);
+        BitList<Invoker<TagRouterRule>> invokers = new BitList<>(originInvokers);
+
+        RpcInvocation invocation = new RpcInvocation();
+        invocation.setAttachment(TAG_KEY, ANY_VALUE);
+
+        List<Invoker<TagRouterRule>> filteredInvokers =
+                router.route(invokers.clone(), invokers.get(0).getUrl(), invocation, false, new Holder<>());
+
+        Assertions.assertEquals(4, filteredInvokers.size());
+        Assertions.assertEquals(invoker1, filteredInvokers.get(0));
+        Assertions.assertEquals(invoker2, filteredInvokers.get(1));
+        Assertions.assertEquals(invoker3, filteredInvokers.get(2));
+        Assertions.assertEquals(invoker4, filteredInvokers.get(3));
+    }
+
+    @Test
+    void testTagRouteWithDynamicRuleWildcardShouldReturnAllProviders() {
+        TagStateRouter router = (TagStateRouter) new TagStateRouterFactory().getRouter(TagRouterRule.class, url);
+        router = Mockito.spy(router);
+
+        List<Invoker<String>> originInvokers = new ArrayList<>();
+
+        URL url1 = URL.valueOf("test://127.0.0.1:7777/DemoInterface?application=foo&dubbo.tag=tag2&match_key=value")
+                .setScopeModel(moduleModel);
+        URL url2 = URL.valueOf("test://127.0.0.1:7778/DemoInterface?application=foo&match_key=value")
+                .setScopeModel(moduleModel);
+        URL url3 = URL.valueOf("test://127.0.0.1:7779/DemoInterface?application=foo")
+                .setScopeModel(moduleModel);
+        Invoker<String> invoker1 = new MockInvoker<>(url1, true);
+        Invoker<String> invoker2 = new MockInvoker<>(url2, true);
+        Invoker<String> invoker3 = new MockInvoker<>(url3, true);
+        originInvokers.add(invoker1);
+        originInvokers.add(invoker2);
+        originInvokers.add(invoker3);
+        BitList<Invoker<String>> invokers = new BitList<>(originInvokers);
+
+        RpcInvocation invocation = new RpcInvocation();
+        invocation.setAttachment(TAG_KEY, ANY_VALUE);
+        TagRouterRule rule = getTagRule();
+        Mockito.when(router.getInvokers()).thenReturn(invokers);
+        rule.init(router);
+        router.setTagRouterRule(rule);
+        List<Invoker<String>> filteredInvokers = router.route(invokers.clone(), url, invocation, false, new Holder<>());
+
+        Assertions.assertEquals(3, filteredInvokers.size());
+        Assertions.assertEquals(invoker1, filteredInvokers.get(0));
+        Assertions.assertEquals(invoker2, filteredInvokers.get(1));
+        Assertions.assertEquals(invoker3, filteredInvokers.get(2));
     }
 }

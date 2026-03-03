@@ -32,10 +32,10 @@ import org.apache.dubbo.metadata.report.identifier.MetadataIdentifier;
 import org.apache.dubbo.metadata.report.identifier.ServiceMetadataIdentifier;
 import org.apache.dubbo.metadata.report.identifier.SubscriberMetadataIdentifier;
 import org.apache.dubbo.metadata.report.support.AbstractMetadataReport;
-import org.apache.dubbo.remoting.zookeeper.DataListener;
-import org.apache.dubbo.remoting.zookeeper.EventType;
-import org.apache.dubbo.remoting.zookeeper.ZookeeperClient;
-import org.apache.dubbo.remoting.zookeeper.ZookeeperTransporter;
+import org.apache.dubbo.remoting.zookeeper.curator5.DataListener;
+import org.apache.dubbo.remoting.zookeeper.curator5.EventType;
+import org.apache.dubbo.remoting.zookeeper.curator5.ZookeeperClient;
+import org.apache.dubbo.remoting.zookeeper.curator5.ZookeeperClientManager;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,9 +53,6 @@ import static org.apache.dubbo.common.constants.LoggerCodeConstants.REGISTRY_ZOO
 import static org.apache.dubbo.metadata.ServiceNameMapping.DEFAULT_MAPPING_GROUP;
 import static org.apache.dubbo.metadata.ServiceNameMapping.getAppNames;
 
-/**
- * ZookeeperMetadataReport
- */
 public class ZookeeperMetadataReport extends AbstractMetadataReport {
 
     private static final ErrorTypeAwareLogger logger =
@@ -67,7 +64,7 @@ public class ZookeeperMetadataReport extends AbstractMetadataReport {
 
     private ConcurrentMap<String, MappingDataListener> casListenerMap = new ConcurrentHashMap<>();
 
-    public ZookeeperMetadataReport(URL url, ZookeeperTransporter zookeeperTransporter) {
+    public ZookeeperMetadataReport(URL url, ZookeeperClientManager zookeeperClientManager) {
         super(url);
         if (url.isAnyHost()) {
             throw new IllegalStateException("registry address == null");
@@ -77,7 +74,7 @@ public class ZookeeperMetadataReport extends AbstractMetadataReport {
             group = PATH_SEPARATOR + group;
         }
         this.root = group;
-        zkClient = zookeeperTransporter.connect(url);
+        zkClient = zookeeperClientManager.connect(url);
     }
 
     protected String toRootDir() {

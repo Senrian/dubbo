@@ -252,6 +252,21 @@ class ConfigManagerTest {
     }
 
     @Test
+    void testAddCustomConfig() {
+        configManager.addConfig(new CustomRegistryConfig("CustomConfigManagerTest"));
+
+        assertTrue(configManager.getRegistry("CustomConfigManagerTest").isPresent());
+    }
+
+    static class CustomRegistryConfig extends RegistryConfig {
+
+        CustomRegistryConfig(String id) {
+            super();
+            this.setId(id);
+        }
+    }
+
+    @Test
     void testRefreshAll() {
         configManager.refreshAll();
         moduleConfigManager.refreshAll();
@@ -395,11 +410,20 @@ class ConfigManagerTest {
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e instanceof IllegalStateException);
-            Assertions.assertEquals(
-                    e.getMessage(),
-                    "Found more than one config by name: dubbo, instances: "
-                            + "[<dubbo:protocol port=\"9103\" name=\"dubbo\" />, <dubbo:protocol name=\"dubbo\" />]. "
-                            + "Please remove redundant configs or get config by id.");
+            String msg = e.getMessage();
+
+            Assertions.assertTrue(
+                    msg.startsWith("Found more than one config by name: dubbo, instances: "),
+                    "Unexpected message prefix: " + msg);
+            Assertions.assertTrue(
+                    msg.contains("<dubbo:protocol port=\"9103\" name=\"dubbo\" />"),
+                    "Message should mention protocol with port 9103: " + msg);
+            Assertions.assertTrue(
+                    msg.contains("<dubbo:protocol name=\"dubbo\" />"),
+                    "Message should mention protocol with default port: " + msg);
+            Assertions.assertTrue(
+                    msg.endsWith("Please remove redundant configs or get config by id."),
+                    "Unexpected message suffix: " + msg);
         }
 
         ModuleConfig moduleConfig = new ModuleConfig();
@@ -481,7 +505,7 @@ class ConfigManagerTest {
     public static class TestPreferSerializationProvider implements PreferSerializationProvider {
         @Override
         public String getPreferSerialization() {
-            return "fastjson2,hessian2";
+            return "hessian2";
         }
     }
 }

@@ -20,11 +20,7 @@ import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.config.configcenter.ConfigItem;
 import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
 import org.apache.dubbo.common.logger.LoggerFactory;
-import org.apache.dubbo.remoting.zookeeper.AbstractZookeeperClient;
-import org.apache.dubbo.remoting.zookeeper.ChildListener;
-import org.apache.dubbo.remoting.zookeeper.DataListener;
-import org.apache.dubbo.remoting.zookeeper.EventType;
-import org.apache.dubbo.remoting.zookeeper.StateListener;
+import org.apache.dubbo.common.utils.UrlUtils;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -55,6 +51,7 @@ import org.apache.zookeeper.data.Stat;
 
 import static org.apache.dubbo.common.constants.CommonConstants.SESSION_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.TIMEOUT_KEY;
+import static org.apache.dubbo.common.constants.CommonConstants.ZOOKEEPER_ENSEMBLE_TRACKER_KEY;
 import static org.apache.dubbo.common.constants.LoggerCodeConstants.CONFIG_FAILED_CONNECT_REGISTRY;
 import static org.apache.dubbo.common.constants.LoggerCodeConstants.REGISTRY_ZOOKEEPER_EXCEPTION;
 
@@ -74,14 +71,16 @@ public class Curator5ZookeeperClient
         try {
             int timeout = url.getParameter(TIMEOUT_KEY, DEFAULT_CONNECTION_TIMEOUT_MS);
             int sessionExpireMs = url.getParameter(SESSION_KEY, DEFAULT_SESSION_TIMEOUT_MS);
+            boolean ensembleTracker = url.getParameter(ZOOKEEPER_ENSEMBLE_TRACKER_KEY, DEFAULT_ENSEMBLE_TRACKER);
             CuratorFrameworkFactory.Builder builder = CuratorFrameworkFactory.builder()
                     .connectString(url.getBackupAddress())
                     .retryPolicy(new RetryNTimes(1, 1000))
                     .connectionTimeoutMs(timeout)
+                    .ensembleTracker(ensembleTracker)
                     .sessionTimeoutMs(sessionExpireMs);
             String userInformation = url.getUserInformation();
             if (userInformation != null && userInformation.length() > 0) {
-                builder = builder.authorization("digest", userInformation.getBytes());
+                builder = builder.authorization("digest", userInformation.getBytes(StandardCharsets.UTF_8));
                 builder.aclProvider(new ACLProvider() {
                     @Override
                     public List<ACL> getDefaultAcl() {
@@ -98,8 +97,10 @@ public class Curator5ZookeeperClient
             client.getConnectionStateListenable().addListener(new CuratorConnectionStateListener(url));
             client.start();
             boolean connected = client.blockUntilConnected(timeout, TimeUnit.MILLISECONDS);
-
-            if (!connected) {
+            boolean check = UrlUtils.isCheck(url);
+            if (check && !connected) {
+                // close CuratorFramework to stop re-connection.
+                client.close();
                 IllegalStateException illegalStateException =
                         new IllegalStateException("zookeeper not connected, the address is: " + url);
 

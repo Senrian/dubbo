@@ -37,16 +37,13 @@ import java.util.List;
 
 import com.alibaba.dubbo.common.Constants;
 
-/**
- * ResourceServlet
- */
 public class ResourceFilter implements Filter {
 
     private static final String CLASSPATH_PREFIX = "classpath:";
 
     private final long start = System.currentTimeMillis();
 
-    private final List<String> resources = new ArrayList<String>();
+    private final List<String> resources = new ArrayList<>();
 
     public void init(FilterConfig filterConfig) throws ServletException {
         String config = filterConfig.getInitParameter("resources");

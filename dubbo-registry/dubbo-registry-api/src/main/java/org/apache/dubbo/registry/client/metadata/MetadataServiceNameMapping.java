@@ -80,7 +80,10 @@ public class MetadataServiceNameMapping extends AbstractServiceNameMapping {
         if (CollectionUtils.isEmpty(
                 applicationModel.getApplicationConfigManager().getMetadataConfigs())) {
             logger.warn(
-                    COMMON_PROPERTY_TYPE_MISMATCH, "", "", "No valid metadata config center found for mapping report.");
+                    COMMON_PROPERTY_TYPE_MISMATCH,
+                    "",
+                    "",
+                    "[METADATA_REGISTER] No valid metadata config center found for mapping report.");
             return false;
         }
         String serviceInterface = url.getServiceInterface();
@@ -109,7 +112,7 @@ public class MetadataServiceNameMapping extends AbstractServiceNameMapping {
                         String[] oldAppNames = oldConfigContent.split(",");
                         if (oldAppNames.length > 0) {
                             for (String oldAppName : oldAppNames) {
-                                if (oldAppName.equals(appName)) {
+                                if (StringUtils.trim(oldAppName).equals(appName)) {
                                     succeeded = true;
                                     break;
                                 }
@@ -130,7 +133,7 @@ public class MetadataServiceNameMapping extends AbstractServiceNameMapping {
                                 + waitTime + ". " + "Service Interface: "
                                 + serviceInterface + ". " + "Origin Content: "
                                 + oldConfigContent + ". " + "Ticket: "
-                                + configItem.getTicket() + ". " + "Excepted context: "
+                                + configItem.getTicket() + ". " + "Expected Content: "
                                 + newConfigContent);
                         Thread.sleep(waitTime);
                     }

@@ -42,8 +42,8 @@ import javassist.CtMethod;
  * Wrapper.
  */
 public abstract class Wrapper {
-    private static final ConcurrentMap<Class<?>, Wrapper> WRAPPER_MAP =
-            new ConcurrentHashMap<Class<?>, Wrapper>(); // class wrapper map
+    // class wrapper map
+    private static final ConcurrentMap<Class<?>, Wrapper> WRAPPER_MAP = new ConcurrentHashMap<>();
     private static final String[] EMPTY_STRING_ARRAY = new String[0];
     private static final String[] OBJECT_METHODS = new String[] {"getClass", "hashCode", "toString", "equals"};
     private static final Wrapper OBJECT_WRAPPER = new Wrapper() {
@@ -112,16 +112,17 @@ public abstract class Wrapper {
      * @return Wrapper instance(not null).
      */
     public static Wrapper getWrapper(Class<?> c) {
-        while (ClassGenerator.isDynamicClass(c)) // can not wrapper on dynamic class.
-        {
-            c = c.getSuperclass();
-        }
+        return ConcurrentHashMapUtils.computeIfAbsent(WRAPPER_MAP, c, (clazz) -> {
+            while (ClassGenerator.isDynamicClass(clazz)) // can not wrapper on dynamic class.
+            {
+                clazz = clazz.getSuperclass();
+            }
 
-        if (c == Object.class) {
-            return OBJECT_WRAPPER;
-        }
-
-        return ConcurrentHashMapUtils.computeIfAbsent(WRAPPER_MAP, c, Wrapper::makeWrapper);
+            if (clazz == Object.class) {
+                return OBJECT_WRAPPER;
+            }
+            return makeWrapper(clazz);
+        });
     }
 
     private static Wrapper makeWrapper(Class<?> c) {

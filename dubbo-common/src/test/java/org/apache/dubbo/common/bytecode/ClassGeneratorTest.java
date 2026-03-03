@@ -20,8 +20,9 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import javassist.ClassPool;
 
@@ -56,7 +57,8 @@ class ClassGeneratorTest {
         ClassGenerator cg = ClassGenerator.newInstance();
 
         // add className, interface, superClass
-        String className = BaseClass.class.getPackage().getName() + ".TestClass";
+        String className = BaseClass.class.getPackage().getName() + ".TestClass"
+                + UUID.randomUUID().toString().replace("-", "");
         cg.setClassName(className);
         cg.addInterface(BaseInterface.class);
         cg.setSuperClass(BaseClass.class);
@@ -184,7 +186,7 @@ class ClassGeneratorTest {
         fname.setAccessible(true);
 
         ClassGenerator cg = ClassGenerator.newInstance();
-        cg.setClassName(Bean.class.getName() + "$Builder");
+        cg.setClassName(Bean.class.getName() + "$Builder" + UUID.randomUUID().toString());
         cg.addInterface(Builder.class);
 
         cg.addField("public static java.lang.reflect.Field FNAME;");
@@ -197,11 +199,11 @@ class ClassGeneratorTest {
         Class<?> cl = cg.toClass(Bean.class);
         cl.getField("FNAME").set(null, fname);
 
-        System.out.println(cl.getName());
+        Assertions.assertTrue(cl.getName().startsWith(Bean.class.getName() + "$Builder"));
         Builder<String> builder = (Builder<String>) cl.getDeclaredConstructor().newInstance();
-        System.out.println(b.getName());
+        Assertions.assertEquals("qianlei", b.getName());
         builder.setName(b, "ok");
-        System.out.println(b.getName());
+        Assertions.assertEquals("ok", b.getName());
     }
 
     @Test
@@ -211,7 +213,7 @@ class ClassGeneratorTest {
         fname.setAccessible(true);
 
         ClassGenerator cg = ClassGenerator.newInstance();
-        cg.setClassName(Bean.class.getName() + "$Builder2");
+        cg.setClassName(Bean.class.getName() + "$Builder2" + UUID.randomUUID().toString());
         cg.addInterface(Builder.class);
 
         cg.addField("FNAME", Modifier.PUBLIC | Modifier.STATIC, java.lang.reflect.Field.class);
@@ -224,11 +226,11 @@ class ClassGeneratorTest {
         Class<?> cl = cg.toClass(Bean.class);
         cl.getField("FNAME").set(null, fname);
 
-        System.out.println(cl.getName());
+        Assertions.assertTrue(cl.getName().startsWith(Bean.class.getName() + "$Builder2"));
         Builder<String> builder = (Builder<String>) cl.getDeclaredConstructor().newInstance();
-        System.out.println(b.getName());
+        Assertions.assertEquals("qianlei", b.getName());
         builder.setName(b, "ok");
-        System.out.println(b.getName());
+        Assertions.assertEquals("ok", b.getName());
     }
 
     @Test
@@ -236,7 +238,7 @@ class ClassGeneratorTest {
         int threadCount = 5;
         CountDownLatch LATCH = new CountDownLatch(threadCount);
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
-        List<Integer> hashCodeList = new ArrayList<>();
+        List<Integer> hashCodeList = new CopyOnWriteArrayList<>();
         for (int i = 0; i < threadCount; i++) {
             new Thread(new Runnable() {
                         @Override
@@ -244,7 +246,6 @@ class ClassGeneratorTest {
                             ClassPool classPool = ClassGenerator.getClassPool(loader);
                             int currentHashCode = classPool.hashCode();
                             hashCodeList.add(currentHashCode);
-                            System.out.println(currentHashCode);
                             LATCH.countDown();
                         }
                     })

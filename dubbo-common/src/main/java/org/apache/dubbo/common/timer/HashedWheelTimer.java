@@ -19,6 +19,7 @@ package org.apache.dubbo.common.timer;
 import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.ClassUtils;
+import org.apache.dubbo.common.utils.SystemPropertyConfigUtils;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -36,7 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.apache.dubbo.common.constants.CommonConstants.OS_NAME_KEY;
+import static org.apache.dubbo.common.constants.CommonConstants.SystemProperty.SYSTEM_OS_NAME;
 import static org.apache.dubbo.common.constants.CommonConstants.OS_WIN_PREFIX;
 import static org.apache.dubbo.common.constants.LoggerCodeConstants.COMMON_ERROR_RUN_THREAD_TASK;
 import static org.apache.dubbo.common.constants.LoggerCodeConstants.COMMON_ERROR_TOO_MANY_INSTANCES;
@@ -87,7 +88,7 @@ public class HashedWheelTimer implements Timer {
     /**
      * may be in spi?
      */
-    public static final String NAME = "hased";
+    public static final String NAME = "hashed";
 
     private static final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(HashedWheelTimer.class);
 
@@ -305,11 +306,11 @@ public class HashedWheelTimer implements Timer {
     }
 
     /**
-     * Starts the background thread explicitly.  The background thread will
+     * Starts the background thread explicitly. The background thread will
      * start automatically on demand even if you did not call this method.
      *
      * @throws IllegalStateException if this timer has been
-     *                               {@linkplain #stop() stopped} already
+     * {@linkplain #stop() stopped} already
      */
     public void start() {
         switch (WORKER_STATE_UPDATER.get(this)) {
@@ -427,7 +428,7 @@ public class HashedWheelTimer implements Timer {
     }
 
     private final class Worker implements Runnable {
-        private final Set<Timeout> unprocessedTimeouts = new HashSet<Timeout>();
+        private final Set<Timeout> unprocessedTimeouts = new HashSet<>();
 
         private long tick;
 
@@ -697,7 +698,7 @@ public class HashedWheelTimer implements Timer {
     private static final class HashedWheelBucket {
 
         /**
-         * Used for the linked-list datastructure
+         * Used for the linked-list data structure
          */
         private HashedWheelTimeout head;
         private HashedWheelTimeout tail;
@@ -811,7 +812,7 @@ public class HashedWheelTimer implements Timer {
         }
     }
 
-    private static final boolean IS_OS_WINDOWS = System.getProperty(OS_NAME_KEY, "").toLowerCase(Locale.US).contains(OS_WIN_PREFIX);
+    private static final boolean IS_OS_WINDOWS = SystemPropertyConfigUtils.getSystemProperty(SYSTEM_OS_NAME, "").toLowerCase(Locale.US).contains(OS_WIN_PREFIX);
 
     private boolean isWindows() {
         return IS_OS_WINDOWS;

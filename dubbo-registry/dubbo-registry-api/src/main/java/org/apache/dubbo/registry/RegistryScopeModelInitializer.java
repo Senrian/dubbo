@@ -17,14 +17,16 @@
 package org.apache.dubbo.registry;
 
 import org.apache.dubbo.common.beans.factory.ScopeBeanFactory;
+import org.apache.dubbo.registry.client.metadata.MetadataServiceDelegation;
+import org.apache.dubbo.registry.client.metadata.MetadataServiceDelegationV2;
 import org.apache.dubbo.registry.integration.ExporterFactory;
 import org.apache.dubbo.registry.support.RegistryManager;
 import org.apache.dubbo.rpc.model.ApplicationModel;
 import org.apache.dubbo.rpc.model.FrameworkModel;
-import org.apache.dubbo.rpc.model.ModuleModel;
 import org.apache.dubbo.rpc.model.ScopeModelInitializer;
 
 public class RegistryScopeModelInitializer implements ScopeModelInitializer {
+
     @Override
     public void initializeFrameworkModel(FrameworkModel frameworkModel) {
         ScopeBeanFactory beanFactory = frameworkModel.getBeanFactory();
@@ -35,8 +37,7 @@ public class RegistryScopeModelInitializer implements ScopeModelInitializer {
     public void initializeApplicationModel(ApplicationModel applicationModel) {
         ScopeBeanFactory beanFactory = applicationModel.getBeanFactory();
         beanFactory.registerBean(RegistryManager.class);
+        beanFactory.registerBean(MetadataServiceDelegation.class);
+        beanFactory.registerBean(MetadataServiceDelegationV2.class);
     }
-
-    @Override
-    public void initializeModuleModel(ModuleModel moduleModel) {}
 }

@@ -16,9 +16,15 @@
  */
 package org.apache.dubbo.rpc.protocol.tri.compressor;
 
+import org.apache.dubbo.common.config.Configuration;
+import org.apache.dubbo.common.config.ConfigurationUtils;
+import org.apache.dubbo.rpc.Constants;
 import org.apache.dubbo.rpc.RpcException;
+import org.apache.dubbo.rpc.model.ApplicationModel;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
@@ -33,9 +39,16 @@ public class Bzip2 implements Compressor, DeCompressor {
 
     public static final String BZIP2 = "bzip2";
 
+    private final int maxMessageSize;
+
     @Override
     public String getMessageEncoding() {
         return BZIP2;
+    }
+
+    public Bzip2() {
+        Configuration conf = ConfigurationUtils.getEnvConfiguration(ApplicationModel.defaultModel());
+        this.maxMessageSize = conf.getInteger(Constants.H2_SETTINGS_MAX_MESSAGE_SIZE, 50 * 1024 * 1024);
     }
 
     @Override
@@ -58,6 +71,15 @@ public class Bzip2 implements Compressor, DeCompressor {
     }
 
     @Override
+    public OutputStream decorate(OutputStream outputStream) {
+        try {
+            return new BZip2CompressorOutputStream(outputStream);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Override
     public byte[] decompress(byte[] payloadByteArr) {
         if (null == payloadByteArr || 0 == payloadByteArr.length) {
             return new byte[0];
@@ -66,10 +88,16 @@ public class Bzip2 implements Compressor, DeCompressor {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayInputStream in = new ByteArrayInputStream(payloadByteArr);
         try {
+            int totalBytesRead = 0;
             BZip2CompressorInputStream unZip = new BZip2CompressorInputStream(in);
             byte[] buffer = new byte[2048];
             int n;
             while ((n = unZip.read(buffer)) >= 0) {
+                totalBytesRead += n;
+                if (totalBytesRead > maxMessageSize) {
+                    throw new RpcException("Decompressed message size " + totalBytesRead
+                            + " exceeds the maximum configured message size " + maxMessageSize);
+                }
                 out.write(buffer, 0, n);
             }
         } catch (Exception e) {

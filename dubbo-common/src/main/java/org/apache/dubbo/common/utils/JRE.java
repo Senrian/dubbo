@@ -19,6 +19,8 @@ package org.apache.dubbo.common.utils;
 import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 
+import static org.apache.dubbo.common.constants.CommonConstants.SystemProperty.SYSTEM_JAVA_VERSION;
+
 /**
  * JRE version
  */
@@ -55,6 +57,10 @@ public enum JRE {
 
     JAVA_23,
 
+    JAVA_24,
+
+    JAVA_25,
+
     OTHER;
 
     private static final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(JRE.class);
@@ -81,7 +87,7 @@ public enum JRE {
 
     private static JRE getJre() {
         // get java version from system property
-        String version = System.getProperty("java.version");
+        String version = SystemPropertyConfigUtils.getSystemProperty(SYSTEM_JAVA_VERSION);
         boolean isBlank = StringUtils.isBlank(version);
         if (isBlank) {
             logger.debug("java.version is blank");
@@ -123,6 +129,12 @@ public enum JRE {
                     return JAVA_21;
                 case 22:
                     return JAVA_22;
+                case 23:
+                    return JAVA_23;
+                case 24:
+                    return JAVA_24;
+                case 25:
+                    return JAVA_25;
                 default:
                     return OTHER;
             }

@@ -103,10 +103,23 @@ public class DubboMatchRequest {
 
         // Match attachment
         if (getAttachments() != null) {
-            return getAttachments().isMatch(invocation, contextProviders);
+            if (!getAttachments().isMatch(invocation, contextProviders)) {
+                return false;
+            }
         }
 
-        // TODO Match headers
+        // Match headers
+        if (getHeaders() != null && !getHeaders().isEmpty()) {
+            Map<Object, Object> attributes = invocation.getAttributes();
+            for (Map.Entry<String, StringMatch> entry : getHeaders().entrySet()) {
+                String key = entry.getKey();
+                Object value = attributes.get(key);
+                String strValue = value != null ? String.valueOf(value) : null;
+                if (!entry.getValue().isMatch(strValue)) {
+                    return false;
+                }
+            }
+        }
 
         return true;
     }

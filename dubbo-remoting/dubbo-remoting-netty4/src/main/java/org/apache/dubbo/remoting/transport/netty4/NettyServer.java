@@ -18,11 +18,14 @@ package org.apache.dubbo.remoting.transport.netty4;
 
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.config.ConfigurationUtils;
-import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
-import org.apache.dubbo.common.logger.LoggerFactory;
+import org.apache.dubbo.common.utils.ClassUtils;
 import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.common.utils.NetUtils;
+import org.apache.dubbo.metrics.event.MetricsEventBus;
+import org.apache.dubbo.metrics.model.key.MetricsKey;
+import org.apache.dubbo.metrics.registry.event.NettyEvent;
 import org.apache.dubbo.remoting.Channel;
+import org.apache.dubbo.remoting.ChannelEvent;
 import org.apache.dubbo.remoting.ChannelHandler;
 import org.apache.dubbo.remoting.Constants;
 import org.apache.dubbo.remoting.RemotingException;
@@ -30,10 +33,12 @@ import org.apache.dubbo.remoting.transport.AbstractServer;
 import org.apache.dubbo.remoting.transport.dispatcher.ChannelHandlers;
 import org.apache.dubbo.remoting.transport.netty4.ssl.SslServerTlsHandler;
 import org.apache.dubbo.remoting.utils.UrlUtils;
+import org.apache.dubbo.rpc.model.ApplicationModel;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 
 import io.netty.bootstrap.ServerBootstrap;
@@ -58,7 +63,6 @@ import static org.apache.dubbo.remoting.Constants.EVENT_LOOP_WORKER_POOL_NAME;
  */
 public class NettyServer extends AbstractServer {
 
-    private static final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(NettyServer.class);
     /**
      * the cache for alive worker channel.
      * <ip:port, dubbo channel>
@@ -75,16 +79,13 @@ public class NettyServer extends AbstractServer {
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
-    private final int serverShutdownTimeoutMills;
+    private int serverShutdownTimeoutMills;
 
     public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
         // you can customize name and type of client thread pool by THREAD_NAME_KEY and THREAD_POOL_KEY in
         // CommonConstants.
         // the handler will be wrapped: MultiMessageHandler->HeartbeatHandler->handler
         super(url, ChannelHandlers.wrap(handler, url));
-
-        // read config before destroy
-        serverShutdownTimeoutMills = ConfigurationUtils.getServerShutdownTimeout(getUrl().getOrDefaultModuleModel());
     }
 
     /**
@@ -95,6 +96,10 @@ public class NettyServer extends AbstractServer {
     @Override
     protected void doOpen() throws Throwable {
         bootstrap = new ServerBootstrap();
+
+        // initialize serverShutdownTimeoutMills before potential usage to avoid NPE.
+        // read config before destroy
+        serverShutdownTimeoutMills = ConfigurationUtils.getServerShutdownTimeout(getUrl().getOrDefaultModuleModel());
 
         bossGroup = createBossGroup();
         workerGroup = createWorkerGroup();
@@ -113,6 +118,37 @@ public class NettyServer extends AbstractServer {
             closeBootstrap();
             throw t;
         }
+
+        // metrics
+        if (isSupportMetrics()) {
+            ApplicationModel applicationModel = ApplicationModel.defaultModel();
+            MetricsEventBus.post(NettyEvent.toNettyEvent(applicationModel), () -> {
+                Map<String, Long> dataMap = new HashMap<>();
+                dataMap.put(
+                        MetricsKey.NETTY_ALLOCATOR_HEAP_MEMORY_USED.getName(),
+                        PooledByteBufAllocator.DEFAULT.metric().usedHeapMemory());
+                dataMap.put(
+                        MetricsKey.NETTY_ALLOCATOR_DIRECT_MEMORY_USED.getName(),
+                        PooledByteBufAllocator.DEFAULT.metric().usedDirectMemory());
+                dataMap.put(MetricsKey.NETTY_ALLOCATOR_HEAP_ARENAS_NUM.getName(), (long)
+                        PooledByteBufAllocator.DEFAULT.numHeapArenas());
+                dataMap.put(MetricsKey.NETTY_ALLOCATOR_DIRECT_ARENAS_NUM.getName(), (long)
+                        PooledByteBufAllocator.DEFAULT.numDirectArenas());
+                dataMap.put(MetricsKey.NETTY_ALLOCATOR_NORMAL_CACHE_SIZE.getName(), (long)
+                        PooledByteBufAllocator.DEFAULT.normalCacheSize());
+                dataMap.put(MetricsKey.NETTY_ALLOCATOR_SMALL_CACHE_SIZE.getName(), (long)
+                        PooledByteBufAllocator.DEFAULT.smallCacheSize());
+                dataMap.put(MetricsKey.NETTY_ALLOCATOR_THREAD_LOCAL_CACHES_NUM.getName(), (long)
+                        PooledByteBufAllocator.DEFAULT.numThreadLocalCaches());
+                dataMap.put(MetricsKey.NETTY_ALLOCATOR_CHUNK_SIZE.getName(), (long)
+                        PooledByteBufAllocator.DEFAULT.chunkSize());
+                return dataMap;
+            });
+        }
+    }
+
+    private boolean isSupportMetrics() {
+        return ClassUtils.isPresent("io.netty.buffer.PooledByteBufAllocatorMetric", NettyServer.class.getClassLoader());
     }
 
     protected EventLoopGroup createBossGroup() {
@@ -154,7 +190,7 @@ public class NettyServer extends AbstractServer {
     }
 
     @Override
-    protected void doClose() throws Throwable {
+    protected void doClose() {
         try {
             if (channel != null) {
                 // unbind.
@@ -210,10 +246,7 @@ public class NettyServer extends AbstractServer {
 
     @Override
     public Collection<Channel> getChannels() {
-        Collection<Channel> chs = new ArrayList<>(this.channels.size());
-        // pick channels from NettyServerHandler ( needless to check connectivity )
-        chs.addAll(this.channels.values());
-        return chs;
+        return new ArrayList<>(channels.values());
     }
 
     @Override
@@ -249,5 +282,43 @@ public class NettyServer extends AbstractServer {
 
     protected Map<String, Channel> getServerChannels() {
         return channels;
+    }
+
+    @Override
+    public void fireChannelEvent(ChannelEvent event) {
+        Collection<Channel> channels = getChannels();
+        if (CollectionUtils.isEmpty(channels)) {
+            return;
+        }
+        for (Channel channel : channels) {
+            try {
+                if (channel.isConnected()) {
+                    fireChannelEventToChannel(channel, event);
+                }
+            } catch (Throwable e) {
+                logger.warn(
+                        TRANSPORT_FAILED_CLOSE,
+                        "",
+                        "",
+                        "Failed to fire channel event to channel: " + channel + ", event: " + event,
+                        e);
+            }
+        }
+    }
+
+    /**
+     * Fire ChannelEvent to the channel.
+     * The event will be handled by protocol-specific handlers.
+     *
+     * @param channel the Dubbo channel
+     * @param event the channel event to fire
+     */
+    private void fireChannelEventToChannel(Channel channel, ChannelEvent event) {
+        if (channel instanceof NettyChannel) {
+            io.netty.channel.Channel nettyChannel = ((NettyChannel) channel).getNioChannel();
+            if (nettyChannel != null && nettyChannel.isActive()) {
+                nettyChannel.pipeline().fireUserEventTriggered(event);
+            }
+        }
     }
 }

@@ -37,12 +37,15 @@ import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.dubbo.common.constants.CommonConstants.PATH_KEY;
 import static org.apache.dubbo.rpc.Constants.MOCK_KEY;
 import static org.apache.dubbo.rpc.cluster.Constants.REFER_KEY;
 
 class MockProviderRpcExceptionTest {
+    private static final Logger logger = LoggerFactory.getLogger(MockProviderRpcExceptionTest.class);
 
     List<Invoker<IHelloRpcService>> invokers = new ArrayList<Invoker<IHelloRpcService>>();
 
@@ -62,7 +65,7 @@ class MockProviderRpcExceptionTest {
                 .addParameter("invoke_return_error", "true")
                 .addParameter(
                         REFER_KEY,
-                        URL.encode(PATH_KEY + "=" + MockProviderRpcExceptionTest.IHelloRpcService.class.getName()
+                        URL.encode(PATH_KEY + "=" + IHelloRpcService.class.getName()
                                 + "&" + "mock=true"
                                 + "&" + "proxy=jdk"));
         Invoker<IHelloRpcService> cluster = getClusterInvoker(url);
@@ -166,7 +169,7 @@ class MockProviderRpcExceptionTest {
         }
 
         public void sayHello() {
-            System.out.println("hello prety");
+            logger.info("hello prety");
         }
     }
 
@@ -210,7 +213,7 @@ class MockProviderRpcExceptionTest {
         }
 
         public void sayHello() {
-            System.out.println("hello prety");
+            logger.info("hello prety");
         }
     }
 

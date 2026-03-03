@@ -47,6 +47,8 @@ public interface MetricsConstants {
 
     String TAG_CHANGE_TYPE = "change.type";
 
+    String TAG_ERROR_CODE = "error";
+
     String ENABLE_JVM_METRICS_KEY = "enable.jvm";
 
     String ENABLE_COLLECTOR_SYNC_KEY = "enable.collector.sync";
@@ -96,4 +98,6 @@ public interface MetricsConstants {
     String METRIC_FILTER_START_TIME = "metric_filter_start_time";
 
     String TAG_THREAD_NAME = "thread.pool.name";
+
+    String PROTOCOL_OTLP = "otlp";
 }

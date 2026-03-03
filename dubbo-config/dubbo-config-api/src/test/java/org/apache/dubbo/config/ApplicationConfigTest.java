@@ -46,11 +46,15 @@ class ApplicationConfigTest {
     @BeforeEach
     public void beforeEach() {
         DubboBootstrap.reset();
+        SysProps.clear();
+        SysProps.setProperty("dubbo.metrics.enabled", "false");
+        SysProps.setProperty("dubbo.metrics.protocol", "disabled");
     }
 
     @AfterEach
     public void afterEach() {
         SysProps.clear();
+        DubboBootstrap.reset();
     }
 
     @Test
@@ -142,8 +146,8 @@ class ApplicationConfigTest {
     @Test
     void testLogger() {
         ApplicationConfig application = new ApplicationConfig("app");
-        application.setLogger("log4j");
-        assertThat(application.getLogger(), equalTo("log4j"));
+        application.setLogger("log4j2");
+        assertThat(application.getLogger(), equalTo("log4j2"));
     }
 
     @Test

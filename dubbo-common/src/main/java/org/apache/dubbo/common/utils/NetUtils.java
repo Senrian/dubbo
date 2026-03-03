@@ -48,8 +48,6 @@ import java.util.regex.PatternSyntaxException;
 import static java.util.Collections.emptyList;
 import static org.apache.dubbo.common.constants.CommonConstants.ANYHOST_VALUE;
 import static org.apache.dubbo.common.constants.CommonConstants.DUBBO_IP_TO_BIND;
-import static org.apache.dubbo.common.constants.CommonConstants.DUBBO_NETWORK_IGNORED_INTERFACE;
-import static org.apache.dubbo.common.constants.CommonConstants.DUBBO_PREFERRED_NETWORK_INTERFACE;
 import static org.apache.dubbo.common.constants.CommonConstants.LOCALHOST_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.LOCALHOST_VALUE;
 import static org.apache.dubbo.common.utils.CollectionUtils.first;
@@ -107,6 +105,21 @@ public final class NetUtils {
      */
     private static BitSet USED_PORT = new BitSet(65536);
 
+    private static boolean reuseAddressSupported;
+
+    static {
+        try (ServerSocket serverSocket = new ServerSocket()) {
+            serverSocket.setReuseAddress(true);
+            reuseAddressSupported = true;
+        } catch (Throwable ignored) {
+            // ignore.
+        }
+    }
+
+    public static boolean isReuseAddressSupported() {
+        return reuseAddressSupported;
+    }
+
     public static int getRandomPort() {
         return RND_PORT_START + ThreadLocalRandom.current().nextInt(RND_PORT_RANGE);
     }
@@ -125,7 +138,12 @@ public final class NetUtils {
             if (USED_PORT.get(i)) {
                 continue;
             }
-            try (ServerSocket ignored = new ServerSocket(i)) {
+            try (ServerSocket serverSocket = new ServerSocket()) {
+                if (reuseAddressSupported) {
+                    // SO_REUSEADDR should be enabled before bind.
+                    serverSocket.setReuseAddress(true);
+                }
+                serverSocket.bind(new InetSocketAddress(i));
                 USED_PORT.set(i);
                 port = i;
                 break;
@@ -138,11 +156,17 @@ public final class NetUtils {
 
     /**
      * Check the port whether is in use in os
+     *
      * @param port port to check
      * @return true if it's occupied
      */
     public static boolean isPortInUsed(int port) {
-        try (ServerSocket ignored = new ServerSocket(port)) {
+        try (ServerSocket serverSocket = new ServerSocket()) {
+            if (reuseAddressSupported) {
+                // SO_REUSEADDR should be enabled before bind.
+                serverSocket.setReuseAddress(true);
+            }
+            serverSocket.bind(new InetSocketAddress(port));
             return false;
         } catch (IOException e) {
             // continue
@@ -153,9 +177,9 @@ public final class NetUtils {
     /**
      * Tells whether the port to test is an invalid port.
      *
-     * @implNote Numeric comparison only.
      * @param port port to test
      * @return true if invalid
+     * @implNote Numeric comparison only.
      */
     public static boolean isInvalidPort(int port) {
         return port < MIN_PORT || port > MAX_PORT;
@@ -164,9 +188,9 @@ public final class NetUtils {
     /**
      * Tells whether the address to test is an invalid address.
      *
-     * @implNote Pattern matching only.
      * @param address address to test
      * @return true if invalid
+     * @implNote Pattern matching only.
      */
     public static boolean isValidAddress(String address) {
         return ADDRESS_PATTERN.matcher(address).matches();
@@ -197,7 +221,7 @@ public final class NetUtils {
     }
 
     static boolean isValidV4Address(InetAddress address) {
-        if (address == null || address.isLoopbackAddress()) {
+        if (address == null || address.isLoopbackAddress() || address.isLinkLocalAddress()) {
             return false;
         }
 
@@ -452,7 +476,13 @@ public final class NetUtils {
                 || !networkInterface.isUp()) {
             return true;
         }
-        String ignoredInterfaces = System.getProperty(DUBBO_NETWORK_IGNORED_INTERFACE);
+        if (Boolean.parseBoolean(SystemPropertyConfigUtils.getSystemProperty(
+                        CommonConstants.DubboProperty.DUBBO_NETWORK_INTERFACE_POINT_TO_POINT_IGNORED, "false"))
+                && networkInterface.isPointToPoint()) {
+            return true;
+        }
+        String ignoredInterfaces = SystemPropertyConfigUtils.getSystemProperty(
+                CommonConstants.DubboProperty.DUBBO_NETWORK_IGNORED_INTERFACE);
         String networkInterfaceDisplayName;
         if (StringUtils.isNotEmpty(ignoredInterfaces)
                 && StringUtils.isNotEmpty(networkInterfaceDisplayName = networkInterface.getDisplayName())) {
@@ -505,11 +535,12 @@ public final class NetUtils {
      *
      * @param networkInterface {@link NetworkInterface}
      * @return if the name of the specified {@link NetworkInterface} matches
-     * the property value from {@link CommonConstants#DUBBO_PREFERRED_NETWORK_INTERFACE}, return <code>true</code>,
+     * the property value from {@link CommonConstants.DubboProperty#DUBBO_PREFERRED_NETWORK_INTERFACE}, return <code>true</code>,
      * or <code>false</code>
      */
     public static boolean isPreferredNetworkInterface(NetworkInterface networkInterface) {
-        String preferredNetworkInterface = System.getProperty(DUBBO_PREFERRED_NETWORK_INTERFACE);
+        String preferredNetworkInterface = SystemPropertyConfigUtils.getSystemProperty(
+                CommonConstants.DubboProperty.DUBBO_PREFERRED_NETWORK_INTERFACE);
         return Objects.equals(networkInterface.getDisplayName(), preferredNetworkInterface);
     }
 
@@ -546,7 +577,11 @@ public final class NetUtils {
                     if (addressOp.isPresent()) {
                         try {
                             if (addressOp.get().isReachable(100)) {
-                                return networkInterface;
+                                if (addressOp.get().isSiteLocalAddress()) {
+                                    return networkInterface;
+                                } else {
+                                    result = networkInterface;
+                                }
                             }
                         } catch (IOException e) {
                             // ignore

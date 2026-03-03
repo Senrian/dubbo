@@ -18,6 +18,9 @@ package org.apache.dubbo.rpc.protocol.tri.stream;
 
 import org.apache.dubbo.rpc.TriRpcStatus;
 
+import javax.net.ssl.SSLSession;
+
+import java.io.InputStream;
 import java.net.SocketAddress;
 
 import io.netty.handler.codec.http2.Http2Headers;
@@ -39,9 +42,11 @@ public interface Stream {
          * Callback when receive message. Note this method may be called many times if is a
          * streaming .
          *
-         * @param message message received from remote peer
+         * @param message message received from remote peer as InputStream
+         * @param messageLength the length of the message in bytes
+         * @param isReturnTriException whether the message is a Triple exception
          */
-        void onMessage(byte[] message, boolean isReturnTriException);
+        void onMessage(InputStream message, int messageLength, boolean isReturnTriException);
 
         /**
          * Callback when receive cancel signal.
@@ -50,6 +55,14 @@ public interface Stream {
          */
         void onCancelByRemote(TriRpcStatus status);
     }
+
+    /**
+     * Returns whether the stream is ready for writing.
+     * If false, the caller should avoid calling sendMessage to prevent blocking or excessive buffering.
+     *
+     * @return true if the stream is ready for writing
+     */
+    boolean isReady();
 
     /**
      * Send headers to remote peer.
@@ -73,6 +86,13 @@ public interface Stream {
      * @return socket address of remote peer
      */
     SocketAddress remoteAddress();
+
+    /**
+     * Get ssl session.
+     *
+     * @return ssl session
+     */
+    SSLSession getSslSession();
 
     /**
      * Request n message from remote peer.

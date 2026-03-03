@@ -21,6 +21,8 @@ import org.apache.dubbo.common.logger.jdk.JdkLoggerAdapter;
 import org.apache.dubbo.common.logger.log4j.Log4jLoggerAdapter;
 import org.apache.dubbo.common.logger.log4j2.Log4j2LoggerAdapter;
 import org.apache.dubbo.common.logger.slf4j.Slf4jLoggerAdapter;
+import org.apache.dubbo.common.logger.support.FailsafeErrorTypeAwareLogger;
+import org.apache.dubbo.common.logger.support.FailsafeLogger;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.stream.Stream;
@@ -49,12 +51,19 @@ class LoggerTest {
     void testAllLogMethod(Class<? extends LoggerAdapter> loggerAdapter) throws Exception {
         LoggerAdapter adapter = loggerAdapter.getDeclaredConstructor().newInstance();
         adapter.setLevel(Level.ALL);
-        Logger logger = adapter.getLogger(this.getClass());
+        Logger logger =
+                new FailsafeErrorTypeAwareLogger(adapter.getLogger(FailsafeLogger.class.getName(), this.getClass()));
         logger.error("error");
         logger.warn("warn");
         logger.info("info");
         logger.debug("debug");
-        logger.trace("info");
+        logger.trace("trace");
+
+        logger.error("error:{}", "arg1");
+        logger.warn("warn:{}", "arg1");
+        logger.info("info:{}", "arg1");
+        logger.debug("debug:{}", "arg1");
+        logger.trace("trace:{}", "arg1");
 
         logger.error(new Exception("error"));
         logger.warn(new Exception("warn"));
@@ -67,6 +76,12 @@ class LoggerTest {
         logger.info("info", new Exception("info"));
         logger.debug("debug", new Exception("debug"));
         logger.trace("trace", new Exception("trace"));
+
+        logger.error("error:{}", "arg1", new Exception("error"));
+        logger.warn("warn:{}", "arg1", new Exception("warn"));
+        logger.info("info:{}", "arg1", new Exception("info"));
+        logger.debug("debug:{}", "arg1", new Exception("debug"));
+        logger.trace("trace:{}", "arg1", new Exception("trace"));
     }
 
     @ParameterizedTest

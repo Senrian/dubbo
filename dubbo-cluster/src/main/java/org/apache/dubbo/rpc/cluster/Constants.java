@@ -46,6 +46,8 @@ public interface Constants {
 
     String CONDITIONS_KEY = "conditions";
 
+    String AFFINITY_KEY = "affinityAware";
+
     String TAGS_KEY = "tags";
 
     /**
@@ -138,4 +140,13 @@ public interface Constants {
     String RULE_VERSION_V27 = "v2.7";
 
     String RULE_VERSION_V30 = "v3.0";
+
+    String RULE_VERSION_V31 = "v3.1";
+
+    public static final String TRAFFIC_DISABLE_KEY = "trafficDisable";
+    public static final String RATIO_KEY = "ratio";
+    public static final int DefaultRouteRatio = 0;
+    public static final int DefaultRouteConditionSubSetWeight = 100;
+    public static final int DefaultRoutePriority = 0;
+    public static final double DefaultAffinityRatio = 0;
 }

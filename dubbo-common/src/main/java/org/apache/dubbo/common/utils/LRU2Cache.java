@@ -16,16 +16,19 @@
  */
 package org.apache.dubbo.common.utils;
 
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 
 /**
  * LRU-2
- * </p>
+ * <p>
  * When the data accessed for the first time, add it to history list. If the size of history list reaches max capacity, eliminate the earliest data (first in first out).
  * When the data already exists in the history list, and be accessed for the second time, then it will be put into cache.
- *
+ * </p>
  * TODO, consider replacing with ConcurrentHashMap to improve performance under concurrency
  */
 public class LRU2Cache<K, V> extends LinkedHashMap<K, V> {
@@ -33,8 +36,8 @@ public class LRU2Cache<K, V> extends LinkedHashMap<K, V> {
     private static final long serialVersionUID = -5167631809472116969L;
 
     private static final float DEFAULT_LOAD_FACTOR = 0.75f;
-
     private static final int DEFAULT_MAX_CAPACITY = 1000;
+
     private final Lock lock = new ReentrantLock();
     private volatile int maxCapacity;
 
@@ -95,6 +98,16 @@ public class LRU2Cache<K, V> extends LinkedHashMap<K, V> {
     }
 
     @Override
+    public V computeIfAbsent(K key, Function<? super K, ? extends V> fn) {
+        V value = get(key);
+        if (value == null) {
+            value = fn.apply(key);
+            put(key, value);
+        }
+        return value;
+    }
+
+    @Override
     public V remove(Object key) {
         lock.lock();
         try {
@@ -131,8 +144,24 @@ public class LRU2Cache<K, V> extends LinkedHashMap<K, V> {
     }
 
     public void setMaxCapacity(int maxCapacity) {
-        preCache.setMaxCapacity(maxCapacity);
-        this.maxCapacity = maxCapacity;
+        lock.lock();
+        try {
+            this.maxCapacity = maxCapacity;
+            preCache.setMaxCapacity(maxCapacity);
+            trimMainCache();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void trimMainCache() {
+        while (super.size() > maxCapacity) {
+            Iterator<Map.Entry<K, V>> it = super.entrySet().iterator();
+            if (it.hasNext()) {
+                it.next();
+                it.remove();
+            }
+        }
     }
 
     static class PreCache<K, V> extends LinkedHashMap<K, V> {
@@ -155,6 +184,17 @@ public class LRU2Cache<K, V> extends LinkedHashMap<K, V> {
 
         public void setMaxCapacity(int maxCapacity) {
             this.maxCapacity = maxCapacity;
+            trimToSize();
+        }
+
+        private void trimToSize() {
+            while (super.size() > maxCapacity) {
+                Iterator<Map.Entry<K, V>> it = super.entrySet().iterator();
+                if (it.hasNext()) {
+                    it.next();
+                    it.remove();
+                }
+            }
         }
     }
 }

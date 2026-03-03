@@ -36,9 +36,6 @@ import org.apache.log4j.FileAppender;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 
-/**
- * LogPageHandler
- */
 @Menu(name = "Log", desc = "Show system log.", order = Integer.MAX_VALUE - 11000)
 public class LogPageHandler implements PageHandler {
 
@@ -97,8 +94,8 @@ public class LogPageHandler implements PageHandler {
             }
         }
         Level level = LogManager.getRootLogger().getLevel();
-        List<List<String>> rows = new ArrayList<List<String>>();
-        List<String> row = new ArrayList<String>();
+        List<List<String>> rows = new ArrayList<>();
+        List<String> row = new ArrayList<>();
         row.add(content);
         rows.add(row);
         return new Page(

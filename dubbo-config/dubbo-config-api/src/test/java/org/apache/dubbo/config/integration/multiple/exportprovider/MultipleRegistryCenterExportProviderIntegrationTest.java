@@ -106,7 +106,7 @@ class MultipleRegistryCenterExportProviderIntegrationTest implements Integration
         serviceConfig.setRef(new MultipleRegistryCenterExportProviderServiceImpl());
         serviceConfig.setAsync(false);
 
-        // initailize bootstrap
+        // initialize bootstrap
         DubboBootstrap.getInstance()
                 .application(new ApplicationConfig(PROVIDER_APPLICATION_NAME))
                 .protocol(new ProtocolConfig(PROTOCOL_NAME, PROTOCOL_PORT))
@@ -239,7 +239,6 @@ class MultipleRegistryCenterExportProviderIntegrationTest implements Integration
     @AfterEach
     public void tearDown() throws IOException {
         DubboBootstrap.reset();
-        PROVIDER_APPLICATION_NAME = null;
         serviceConfig = null;
         // The exported service has been unexported
         Assertions.assertTrue(serviceListener.getExportedServices().isEmpty());

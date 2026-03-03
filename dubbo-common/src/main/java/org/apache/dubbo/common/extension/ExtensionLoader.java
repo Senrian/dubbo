@@ -18,6 +18,7 @@ package org.apache.dubbo.common.extension;
 
 import org.apache.dubbo.common.Extension;
 import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.aot.NativeDetector;
 import org.apache.dubbo.common.beans.support.InstantiationStrategy;
 import org.apache.dubbo.common.compact.Dubbo2ActivateUtils;
 import org.apache.dubbo.common.compact.Dubbo2CompactUtils;
@@ -32,10 +33,10 @@ import org.apache.dubbo.common.utils.ArrayUtils;
 import org.apache.dubbo.common.utils.ClassLoaderResourceLoader;
 import org.apache.dubbo.common.utils.ClassUtils;
 import org.apache.dubbo.common.utils.CollectionUtils;
+import org.apache.dubbo.common.utils.ConcurrentHashMapUtils;
 import org.apache.dubbo.common.utils.ConcurrentHashSet;
 import org.apache.dubbo.common.utils.ConfigUtils;
 import org.apache.dubbo.common.utils.Holder;
-import org.apache.dubbo.common.utils.NativeUtils;
 import org.apache.dubbo.common.utils.ReflectUtils;
 import org.apache.dubbo.common.utils.StringUtils;
 import org.apache.dubbo.rpc.model.ApplicationModel;
@@ -75,6 +76,7 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -120,6 +122,7 @@ public class ExtensionLoader<T> {
 
     private final ConcurrentMap<Class<?>, String> cachedNames = new ConcurrentHashMap<>();
 
+    private final ReentrantLock loadExtensionClassesLock = new ReentrantLock();
     private final Holder<Map<String, Class<?>>> cachedClasses = new Holder<>();
 
     private final Map<String, Object> cachedActivates = Collections.synchronizedMap(new LinkedHashMap<>());
@@ -139,7 +142,7 @@ public class ExtensionLoader<T> {
 
     private static final Map<String, String> specialSPILoadingStrategyMap = getSpecialSPILoadingStrategyMap();
 
-    private static SoftReference<Map<java.net.URL, List<String>>> urlListMapCache =
+    private static SoftReference<ConcurrentHashMap<java.net.URL, List<String>>> urlListMapCache =
             new SoftReference<>(new ConcurrentHashMap<>());
 
     private static final List<String> ignoredInjectMethodsDesc = getIgnoredInjectMethodsDesc();
@@ -798,8 +801,9 @@ public class ExtensionLoader<T> {
                                                 || ArrayUtils.contains(wrapper.matches(), name))
                                         && !ArrayUtils.contains(wrapper.mismatches(), name));
                         if (match) {
-                            instance = injectExtension(
-                                    (T) wrapperClass.getConstructor(type).newInstance(instance));
+                            instance = (T) wrapperClass.getConstructor(type).newInstance(instance);
+                            instance = postProcessBeforeInitialization(instance, name);
+                            injectExtension(instance);
                             instance = postProcessAfterInitialization(instance, name);
                         }
                     }
@@ -951,7 +955,8 @@ public class ExtensionLoader<T> {
     private Map<String, Class<?>> getExtensionClasses() {
         Map<String, Class<?>> classes = cachedClasses.get();
         if (classes == null) {
-            synchronized (cachedClasses) {
+            loadExtensionClassesLock.lock();
+            try {
                 classes = cachedClasses.get();
                 if (classes == null) {
                     try {
@@ -968,6 +973,8 @@ public class ExtensionLoader<T> {
                     }
                     cachedClasses.set(classes);
                 }
+            } finally {
+                loadExtensionClassesLock.unlock();
             }
         }
         return classes;
@@ -1183,7 +1190,7 @@ public class ExtensionLoader<T> {
     }
 
     private List<String> getResourceContent(java.net.URL resourceURL) throws IOException {
-        Map<java.net.URL, List<String>> urlListMap = urlListMapCache.get();
+        ConcurrentHashMap<java.net.URL, List<String>> urlListMap = urlListMapCache.get();
         if (urlListMap == null) {
             synchronized (ExtensionLoader.class) {
                 if ((urlListMap = urlListMapCache.get()) == null) {
@@ -1193,7 +1200,7 @@ public class ExtensionLoader<T> {
             }
         }
 
-        List<String> contentList = urlListMap.computeIfAbsent(resourceURL, key -> {
+        List<String> contentList = ConcurrentHashMapUtils.computeIfAbsent(urlListMap, resourceURL, key -> {
             List<String> newContentList = new ArrayList<>();
 
             try (BufferedReader reader =
@@ -1451,7 +1458,7 @@ public class ExtensionLoader<T> {
         // Adaptive Classes' ClassLoader should be the same with Real SPI interface classes' ClassLoader
         ClassLoader classLoader = type.getClassLoader();
         try {
-            if (NativeUtils.isNative()) {
+            if (NativeDetector.inNativeImage()) {
                 return classLoader.loadClass(type.getName() + "$Adaptive");
             }
         } catch (Throwable ignore) {

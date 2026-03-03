@@ -32,22 +32,19 @@ import com.alibaba.dubbo.container.page.Menu;
 import com.alibaba.dubbo.container.page.Page;
 import com.alibaba.dubbo.container.page.PageHandler;
 
-/**
- * StatusPageHandler
- */
 @Menu(name = "Status", desc = "Show system status.", order = Integer.MAX_VALUE - 12000)
 public class StatusPageHandler implements PageHandler {
 
     @Override
     public Page handle(URL url) {
-        List<List<String>> rows = new ArrayList<List<String>>();
+        List<List<String>> rows = new ArrayList<>();
         Set<String> names =
                 ExtensionLoader.getExtensionLoader(StatusChecker.class).getSupportedExtensions();
-        Map<String, Status> statuses = new HashMap<String, Status>();
+        Map<String, Status> statuses = new HashMap<>();
         for (String name : names) {
             StatusChecker checker =
                     ExtensionLoader.getExtensionLoader(StatusChecker.class).getExtension(name);
-            List<String> row = new ArrayList<String>();
+            List<String> row = new ArrayList<>();
             row.add(name);
             Status status = checker.check();
             if (status != null && !Status.Level.UNKNOWN.equals(status.getLevel())) {
@@ -61,7 +58,7 @@ public class StatusPageHandler implements PageHandler {
         if ("status".equals(url.getPath())) {
             return new Page("", "", "", status.getLevel().toString());
         } else {
-            List<String> row = new ArrayList<String>();
+            List<String> row = new ArrayList<>();
             row.add("summary");
             row.add(getLevelHtml(status.getLevel()));
             row.add("<a href=\"/status\" target=\"_blank\">summary</a>");

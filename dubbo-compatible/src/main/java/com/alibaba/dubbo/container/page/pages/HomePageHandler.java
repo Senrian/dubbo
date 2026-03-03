@@ -27,19 +27,16 @@ import com.alibaba.dubbo.container.page.Page;
 import com.alibaba.dubbo.container.page.PageHandler;
 import com.alibaba.dubbo.container.page.PageServlet;
 
-/**
- * HomePageHandler
- */
 @Menu(name = "Home", desc = "Home page.", order = Integer.MIN_VALUE)
 public class HomePageHandler implements PageHandler {
 
     @Override
     public Page handle(URL url) {
-        List<List<String>> rows = new ArrayList<List<String>>();
+        List<List<String>> rows = new ArrayList<>();
         for (PageHandler handler : PageServlet.getInstance().getMenus()) {
             String uri = ExtensionLoader.getExtensionLoader(PageHandler.class).getExtensionName(handler);
             Menu menu = handler.getClass().getAnnotation(Menu.class);
-            List<String> row = new ArrayList<String>();
+            List<String> row = new ArrayList<>();
             row.add("<a href=\"" + uri + ".html\">" + menu.name() + "</a>");
             row.add(menu.desc());
             rows.add(row);
